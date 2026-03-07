@@ -1,0 +1,19 @@
+# HOW TO EDIT THIS FILE:
+# The "handy ruler" below makes it easier to edit a package description.
+# Line up the first '|' above the ':' following the base package name, and
+# the '|' on the right side marks the last column you can put a character in.
+# You must make exactly 11 lines for the formatting to be correct.  It's also
+# customary to leave one space after the ':' except on the handy ruler line.
+
+       |-----handy-ruler------------------------------------------------------|
+seatuya: seatuya (C wrapper for tuyapp Tuya device communication)
+seatuya:
+seatuya: seatuya is a C wrapper library for tuyapp, providing a pure C API
+seatuya: for local Tuya smart-device communication.  Supports protocol
+seatuya: versions 3.1, 3.3, 3.4, and 3.5.
+seatuya:
+seatuya: Homepage: https://github.com/MAINTAINER/seatuya
+seatuya:
+seatuya:
+seatuya:
+seatuya:

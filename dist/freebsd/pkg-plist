@@ -1,0 +1,5 @@
+include/seatuya.h
+lib/libseatuya.so
+lib/libseatuya.so.0
+lib/libseatuya.so.0.0.0
+man/man3/seatuya.3.gz

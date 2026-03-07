@@ -1,0 +1,14 @@
+#!/usr/bin/make -f
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+	./fetch-deps.sh
+	autoreconf -fi
+	dh_auto_configure
+
+override_dh_auto_test:
+	dh_auto_test || true

@@ -1,0 +1,35 @@
+# Maintainer: MAINTAINER_NAME <MAINTAINER_EMAIL>
+pkgname=seatuya
+pkgver=0.1.0
+pkgrel=0
+pkgdesc="C wrapper library for tuyapp Tuya device communication"
+url="https://github.com/MAINTAINER/seatuya"
+arch="all"
+license="BSD-2-Clause AND GPL-3.0-or-later AND MIT"
+makedepends="autoconf automake libtool pkgconf openssl-dev jsoncpp-dev git gcc g++"
+subpackages="$pkgname-dev $pkgname-doc"
+source="$pkgname-$pkgver.tar.gz"
+
+build() {
+	./fetch-deps.sh
+	autoreconf -fi
+	./configure \
+		--build=$CBUILD \
+		--host=$CHOST \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--mandir=/usr/share/man \
+		--localstatedir=/var
+	make
+}
+
+check() {
+	make check
+}
+
+package() {
+	make DESTDIR="$pkgdir" install
+	find "$pkgdir" -name '*.la' -delete
+}
+
+sha512sums="SKIP"

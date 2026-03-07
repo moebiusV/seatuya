@@ -1,0 +1,4 @@
+@comment $OpenBSD$
+include/seatuya.h
+lib/libseatuya.so.${LIBseatuya_VERSION}
+man/man3/seatuya.3
