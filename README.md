@@ -183,25 +183,27 @@ The whole point of seatuya is that you do not need to use C.  After
 its functions.  The API uses only C types: pointers to opaque structs,
 char pointers, ints, and enums.  No C++ types cross the ABI boundary.
 
-The newLISP wrapper (`seatuya.lsp`) shows what a thin FFI module looks
-like in practice.  Once loaded, controlling a device reads like this:
+The newLISP device classes (`tuya-devices.lsp`) show what this looks
+like in practice.  Controlling a device reads like this:
 
 ```newlisp
-(load "seatuya.lsp")
+(load "tuya-devices.lsp")
 
-(setq dev (tuya:create device-id "192.168.1.100" local-key "3.4"))
+(new TuyaDevice 'd)
+(d "3.4" "192.168.1.100" device-id local-key)
 
 ; turn on switch (data point 1)
-(println (tuya:turn-on dev 1))
+(println (d:turn-on 1))
 
 ; query all data points
-(println (tuya:status dev))
+(println (d:status))
 
-(tuya:destroy dev)
+(d:destroy)
+(delete 'd)
 ```
 
 No buffer management, no byte counting, no pointer arithmetic.
-The high-level functions (`turn-on`, `turn-off`, `set-value`,
+The high-level methods (`turn-on`, `turn-off`, `set-value`,
 `status`, `heartbeat`) each perform a complete round-trip internally
 and return the decoded JSON response.
 
@@ -211,20 +213,19 @@ For comparison, the same thing in C:
 #include <seatuya/seatuya.h>
 #include <stdio.h>
 
-tuya_device_t *dev = tuya_create(device_id, "192.168.1.100",
-    local_key, "3.4");
+tuya_device_t *d = tuya_create(device_id, "192.168.1.100", local_key, "3.4");
 
 /* turn on switch (data point 1) */
-char *resp = tuya_turn_on(dev, 1);
+char *resp = tuya_turn_on(d, 1);
 printf("%s\n", resp);
 tuya_free_string(resp);
 
 /* query all data points */
-resp = tuya_status(dev);
+resp = tuya_status(d);
 printf("%s\n", resp);
 tuya_free_string(resp);
 
-tuya_destroy(dev);
+tuya_destroy(d);
 ```
 
 The same approach works in Python ctypes, Lua FFI, Ruby FFI, Tcl,
@@ -261,15 +262,13 @@ Using the low-level API, that cycle looks like this in C:
 
 ```c
 /* set DP 1 to true (turn on a smart plug) */
-char *payload = tuya_generate_payload(dev,
-    TUYA_CMD_CONTROL, device_id, "{\"1\":true}");
+char *payload = tuya_generate_payload(d, TUYA_CMD_CONTROL, device_id, "{\"1\":true}");
 unsigned char buf[1024];
-int n = tuya_build_message(dev, buf,
-    TUYA_CMD_CONTROL, payload, local_key);
+int n = tuya_build_message(d, buf, TUYA_CMD_CONTROL, payload, local_key);
 tuya_free_string(payload);
-tuya_send(dev, buf, n);
-n = tuya_receive(dev, buf, sizeof buf, 0);
-char *response = tuya_decode_message(dev, buf, n, local_key);
+tuya_send(d, buf, n);
+n = tuya_receive(d, buf, sizeof buf, 0);
+char *response = tuya_decode_message(d, buf, n, local_key);
 /* ... use response (the device's JSON reply) ... */
 tuya_free_string(response);
 ```
@@ -281,7 +280,7 @@ library wraps the entire cycle into single-call functions:
 
 ```c
 /* same thing, high-level API */
-char *response = tuya_turn_on(dev, 1);
+char *response = tuya_turn_on(d, 1);
 /* ... use response ... */
 tuya_free_string(response);
 ```
@@ -310,11 +309,10 @@ In newLISP, the device classes provide this.  Each class knows
 its own DP layout and exposes named methods:
 
 ```newlisp
-; Raw DP -- you need to know that DP 1 is the power switch,
-; DP 22 is brightness, DP 24 is colour:
-(tuya:set-value dev 1 true)
-(tuya:set-value dev 22 500)
-(tuya:set-value dev 24 "00dc004603e8")
+; Raw DP -- you need to know that DP 1 is the power switch, DP 22 is brightness, DP 24 is colour:
+(d:set-value 1 true)
+(d:set-value 22 500)
+(d:set-value 24 "00dc004603e8")
 
 ; Named methods -- the class knows the DP numbers:
 (my-bulb:turn-on)
@@ -322,12 +320,12 @@ its own DP layout and exposes named methods:
 (my-bulb:set-colour 255 0 0)    ; RGB, converted to HSV hex internally
 ```
 
-The progression is: raw protocol (5 steps) -> high-level C function
+The progression is: raw protocol (5 steps) -> high-level function
 (1 step, DP number) -> named device method (1 step, no DP number).
 Each layer hides exactly one kind of detail: the C library hides
-buffer management and encryption, the high-level functions hide the
-round-trip ceremony, and the device classes hide device-specific DP
-mappings.
+buffer management and encryption, the `TuyaDevice` methods hide the
+round-trip ceremony, and the device subclasses hide device-specific
+DP mappings.
 
 ## Device classes (newLISP)
 
@@ -345,16 +343,18 @@ tinytuya (Python) has three built-in device classes -- `OutletDevice`,
 `ClimateDevice`, and others) live in tinytuya's community-contributed
 `Contrib` module.
 
-seatuya mirrors this in two layers:
+seatuya mirrors this in `tuya-devices.lsp`:
 
-- **`seatuya.lsp`** corresponds to tinytuya's base `Device` class.
-  `tuya:set-value` and `tuya:status` are the equivalents of
-  `device.set_value()` and `device.status()`.
+- **`TuyaDevice`** is the base class, equivalent to tinytuya's `Device`.
+  `d:set-value`, `d:status`, `d:turn-on` are the equivalents of
+  `d.set_value()`, `d.status()`, `d.turn_on()`.
 
-- **`tuya-devices.lsp`** corresponds to tinytuya's device subclasses.
-  `OutletDevice`, `BulbDevice`, and `CoverDevice` follow the same DP
-  mappings as tinytuya's core classes.  The remaining classes follow
-  their counterparts in tinytuya's community-contributed `Contrib` module.
+- **`OutletDevice`**, **`BulbDevice`**, **`CoverDevice`**, etc. are
+  subclasses (via `new`) that add named methods with hardcoded DP
+  numbers.  `OutletDevice`, `BulbDevice`, and `CoverDevice` follow the
+  same DP mappings as tinytuya's core classes.  The remaining classes
+  follow their counterparts in tinytuya's community-contributed
+  `Contrib` module.
 
 Read-only devices like humidity sensors or air quality monitors work
 through `my-dev:status` on any device class but lack named getters.
@@ -366,59 +366,59 @@ The API mirrors tinytuya's `Device` class closely enough that the
 mapping is mechanical.  If you know tinytuya, you already know
 seatuya -- just change the syntax.
 
-**Base Device (lifecycle and connection):**
+**Base TuyaDevice (lifecycle and connection):**
 
 | tinytuya (Python) | seatuya (C) | seatuya (newLISP) |
 |--------------------|-------------|---------------------|
-| `Device(id, addr, key, ver)` | `tuya_create(id, addr, key, ver)` | `(tuya:create id addr key ver)` |
-| *(incremental setup)* | `tuya_alloc(ver)` | `(tuya:alloc ver)` |
-| *(incremental setup)* | `tuya_set_credentials(dev, id, key)` | `(tuya:set-credentials dev id key)` |
-| *(incremental setup)* | `tuya_connect(dev, addr)` | `(tuya:connect dev addr)` |
-| *(incremental setup)* | `tuya_negotiate_session(dev, key)` | `(tuya:negotiate-session dev key)` |
-| `d.close()` | `tuya_disconnect(dev)` | `(tuya:disconnect dev)` |
-| *(del d)* | `tuya_destroy(dev)` | `(tuya:destroy dev)` |
+| `d = Device(id, addr, key, ver)` | `tuya_device_t *d = tuya_create(id, addr, key, ver)` | `(new TuyaDevice 'd) (d ver addr id key)` |
+| *(incremental setup)* | `tuya_alloc(ver)` | *(use tuya:alloc directly)* |
+| *(incremental setup)* | `tuya_set_credentials(d, id, key)` | *(use tuya:set-credentials directly)* |
+| *(incremental setup)* | `tuya_connect(d, addr)` | *(use tuya:connect directly)* |
+| *(incremental setup)* | `tuya_negotiate_session(d, key)` | *(use tuya:negotiate-session directly)* |
+| `d.close()` | `tuya_disconnect(d)` | `(d:destroy)` |
+| `del d` | `tuya_destroy(d)` | `(d:destroy) (delete 'd)` |
 
 **High-level operations (full round-trip):**
 
 | tinytuya (Python) | seatuya (C) | seatuya (newLISP) |
 |--------------------|-------------|---------------------|
-| `d.turn_on(switch)` | `tuya_turn_on(dev, dp)` | `(tuya:turn-on dev dp)` |
-| `d.turn_off(switch)` | `tuya_turn_off(dev, dp)` | `(tuya:turn-off dev dp)` |
-| `d.set_value(dp, value)` | `tuya_set_value_bool(dev, dp, val)` | `(tuya:set-value dev dp val)` |
-| | `tuya_set_value_int(dev, dp, val)` | *(type auto-detected)* |
-| | `tuya_set_value_string(dev, dp, val)` | |
-| | `tuya_set_value_float(dev, dp, val)` | |
-| `d.status()` | `tuya_status(dev)` | `(tuya:status dev)` |
-| `d.heartbeat()` | `tuya_heartbeat(dev)` | `(tuya:heartbeat dev)` |
-| *(reconnect logic in set_status)* | `tuya_reconnect(dev)` | `(tuya:reconnect dev)` |
+| `d.turn_on(switch)` | `tuya_turn_on(d, dp)` | `(d:turn-on dp)` |
+| `d.turn_off(switch)` | `tuya_turn_off(d, dp)` | `(d:turn-off dp)` |
+| `d.set_value(dp, value)` | `tuya_set_value_bool(d, dp, val)` | `(d:set-value dp val)` |
+| | `tuya_set_value_int(d, dp, val)` | *(type auto-detected)* |
+| | `tuya_set_value_string(d, dp, val)` | |
+| | `tuya_set_value_float(d, dp, val)` | |
+| `d.status()` | `tuya_status(d)` | `(d:status)` |
+| `d.heartbeat()` | `tuya_heartbeat(d)` | `(d:heartbeat)` |
+| *(reconnect logic in set_status)* | `tuya_reconnect(d)` | `(d:reconnect)` |
 
 **Credential and state getters:**
 
 | tinytuya (Python) | seatuya (C) | seatuya (newLISP) |
 |--------------------|-------------|---------------------|
-| `d.id` | `tuya_get_device_id(dev)` | `(tuya:get-device-id dev)` |
-| `d.local_key` | `tuya_get_local_key(dev)` | `(tuya:get-local-key dev)` |
-| `d.address` | `tuya_get_ip(dev)` | `(tuya:get-ip dev)` |
-| *(n/a)* | `tuya_get_protocol(dev)` | `(tuya:get-protocol dev)` |
-| *(n/a)* | `tuya_get_session_state(dev)` | `(tuya:get-session-state dev)` |
-| *(n/a)* | `tuya_get_socket_state(dev)` | `(tuya:get-socket-state dev)` |
-| *(n/a)* | `tuya_get_last_error(dev)` | `(tuya:get-last-error dev)` |
+| `d.id` | `tuya_get_device_id(d)` | `(tuya:get-device-id d:handle)` |
+| `d.local_key` | `tuya_get_local_key(d)` | `(tuya:get-local-key d:handle)` |
+| `d.address` | `tuya_get_ip(d)` | `(tuya:get-ip d:handle)` |
+| *(n/a)* | `tuya_get_protocol(d)` | `(tuya:get-protocol d:handle)` |
+| *(n/a)* | `tuya_get_session_state(d)` | `(tuya:get-session-state d:handle)` |
+| *(n/a)* | `tuya_get_socket_state(d)` | `(tuya:get-socket-state d:handle)` |
+| *(n/a)* | `tuya_get_last_error(d)` | `(tuya:get-last-error d:handle)` |
 
 **Low-level (no tinytuya equivalent -- for pipelining or custom commands):**
 
 | seatuya (C) | seatuya (newLISP) |
 |-------------|---------------------|
-| `tuya_generate_payload(dev, cmd, id, dps)` | `(tuya:generate-payload dev cmd id dps)` |
-| `tuya_build_message(dev, buf, cmd, payload, key)` | `(tuya:build-message dev cmd payload key)` |
-| `tuya_send(dev, buf, size)` | `(tuya:send dev buf)` |
-| `tuya_receive(dev, buf, max, min)` | `(tuya:receive dev)` |
-| `tuya_decode_message(dev, buf, size, key)` | `(tuya:decode-message dev buf key)` |
+| `tuya_generate_payload(d, cmd, id, dps)` | `(tuya:generate-payload d:handle cmd id dps)` |
+| `tuya_build_message(d, buf, cmd, payload, key)` | `(tuya:build-message d:handle cmd payload key)` |
+| `tuya_send(d, buf, size)` | `(tuya:send d:handle buf)` |
+| `tuya_receive(d, buf, max, min)` | `(tuya:receive d:handle)` |
+| `tuya_decode_message(d, buf, size, key)` | `(tuya:decode-message d:handle buf key)` |
 | `tuya_free_string(str)` | *(automatic)* |
 
 tinytuya's `set_value` accepts any Python type and serializes it.
 The C API splits this into four typed functions because C has no
-dynamic typing.  The newLISP wrapper re-unifies them: `tuya:set-value`
-inspects the value and dispatches to the right C function.
+dynamic typing.  The newLISP `TuyaDevice:set-value` (and `tuya:set-value`
+underneath) inspects the value and dispatches to the right C function.
 
 All `char *` returns from C are `malloc`'d.  C callers free them with
 `tuya_free_string()`.  The newLISP wrapper copies the string and frees
@@ -432,17 +432,17 @@ these across two layers:
 
 1. **`libseatuya` (C)** -- transport, encryption, framing, credential
    storage, and high-level round-trip operations (`tuya_set_value_*`,
-   `tuya_status`, `tuya_turn_on`, etc.).  Equivalent to
-   tinytuya's base `Device`.
-2. **`tuya-devices.lsp` (device classes)** -- DP mappings and named
-   methods.  Equivalent to tinytuya's device subclasses.
+   `tuya_status`, `tuya_turn_on`, etc.).
+2. **`tuya-devices.lsp` (newLISP)** -- `TuyaDevice` base class (mirrors
+   tinytuya's `Device` with `d:turn-on`, `d:status`, etc.) plus device
+   subclasses with DP mappings and named methods.
 
 `seatuya.lsp` is a thin FFI wrapper that imports the C functions into
-newLISP.  It adds no logic of its own beyond type dispatch in
-`tuya:set-value`.
+newLISP.  `TuyaDevice` wraps those into `obj:method` form so the API
+reads identically across Python, C, and newLISP.
 
 Each device instance is a newLISP context cloned via `new`.  You can
-always reach through to the raw handle with `my-device:handle` and call
+always reach through to the raw handle with `d:handle` and call
 `tuya:` functions directly -- the abstraction is a convenience, not a
 cage.
 

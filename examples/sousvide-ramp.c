@@ -166,18 +166,17 @@ print_response(char *resp)
 }
 
 static void
-power_on(tuya_device_t *dev)
+power_on(tuya_device_t *d)
 {
 	printf("  powering on\n");
-	print_response(tuya_turn_on(dev, DPS_POWER));
+	print_response(tuya_turn_on(d, DPS_POWER));
 }
 
 static void
-set_temperature_f(tuya_device_t *dev, double temp_f)
+set_temperature_f(tuya_device_t *d, double temp_f)
 {
 	printf("  set target: %.1f F (%.1f C)\n", temp_f, f_to_c(temp_f));
-	print_response(tuya_set_value_int(dev, DPS_TARGET_TEMP,
-	    f_to_dps(temp_f)));
+	print_response(tuya_set_value_int(d, DPS_TARGET_TEMP, f_to_dps(temp_f)));
 }
 
 /* ------------------------------------------------------------------ */
@@ -273,20 +272,19 @@ main(int argc, char *argv[])
 
 	/* Connect to device */
 	printf("connecting to %s...\n", cfg.ip);
-	tuya_device_t *dev = tuya_create(cfg.device_id, cfg.ip,
-	    cfg.local_key, cfg.version);
-	if (!dev) {
+	tuya_device_t *d = tuya_create(cfg.device_id, cfg.ip, cfg.local_key, cfg.version);
+	if (!d) {
 		fprintf(stderr, "error: failed to connect to %s\n", cfg.ip);
 		return 1;
 	}
 
 	/* Query current status */
 	printf("  querying status\n");
-	print_response(tuya_status(dev));
+	print_response(tuya_status(d));
 
 	/* Power on and set initial temperature */
-	power_on(dev);
-	set_temperature_f(dev, start_f);
+	power_on(d);
+	set_temperature_f(d, start_f);
 
 	/* Ramp loop: one adjustment per minute */
 	for (int i = 1; i <= steps; i++) {
@@ -296,14 +294,14 @@ main(int argc, char *argv[])
 		printf("[%3d/%d min] ", i, steps);
 		sleep(60);
 
-		tuya_reconnect(dev);
+		tuya_reconnect(d);
 
-		set_temperature_f(dev, temp);
+		set_temperature_f(d, temp);
 	}
 
 	printf("\nramp complete -- holding at %.1f F\n", end_f);
 
-	tuya_disconnect(dev);
-	tuya_destroy(dev);
+	tuya_disconnect(d);
+	tuya_destroy(d);
 	return 0;
 }

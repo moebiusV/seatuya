@@ -265,18 +265,17 @@ Connect to a device and turn on data point 1 (high-level API):
 .PP
 .RS
 .nf
-tuya_device_t *dev = tuya_create(device_id, "192.168.1.100",
-    local_key, "3.4");
+tuya_device_t *d = tuya_create(device_id, "192.168.1.100", local_key, "3.4");
 
-char *resp = tuya_turn_on(dev, 1);
+char *resp = tuya_turn_on(d, 1);
 printf("%s\\n", resp);
 tuya_free_string(resp);
 
-resp = tuya_status(dev);
+resp = tuya_status(d);
 printf("%s\\n", resp);
 tuya_free_string(resp);
 
-tuya_destroy(dev);
+tuya_destroy(d);
 .fi
 .RE
 .PP
@@ -284,24 +283,22 @@ The same using the low-level API:
 .PP
 .RS
 .nf
-tuya_device_t *dev = tuya_alloc("3.4");
-tuya_connect(dev, "192.168.1.100");
-tuya_negotiate_session(dev, local_key);
+tuya_device_t *d = tuya_alloc("3.4");
+tuya_connect(d, "192.168.1.100");
+tuya_negotiate_session(d, local_key);
 
-char *payload = tuya_generate_payload(dev,
-    TUYA_CMD_CONTROL, device_id, "{\\"1\\":true}");
+char *payload = tuya_generate_payload(d, TUYA_CMD_CONTROL, device_id, "{\\"1\\":true}");
 unsigned char buf[1024];
-int n = tuya_build_message(dev, buf,
-    TUYA_CMD_CONTROL, payload, local_key);
+int n = tuya_build_message(d, buf, TUYA_CMD_CONTROL, payload, local_key);
 tuya_free_string(payload);
 
-tuya_send(dev, buf, n);
-n = tuya_receive(dev, buf, sizeof buf, 0);
-char *response = tuya_decode_message(dev, buf, n, local_key);
+tuya_send(d, buf, n);
+n = tuya_receive(d, buf, sizeof buf, 0);
+char *response = tuya_decode_message(d, buf, n, local_key);
 printf("%s\\n", response);
 tuya_free_string(response);
 
-tuya_destroy(dev);
+tuya_destroy(d);
 .fi
 .RE
 .PP
@@ -311,34 +308,30 @@ this: a thin module wraps the entire C API, and the example
 programs (seatuya-wizard.lsp, sousvide-ramp.lsp) use it to control
 real hardware without writing any C.
 .SS newLISP convenience layer
-.B seatuya.lsp
-wraps the high-level C functions so the five-step round-trip is a
-single call.
-Store credentials once with
-.BR tuya:set-credentials ,
-then use
-.BR tuya:set-value ,
-.BR tuya:turn-on ,
-.BR tuya:turn-off ,
-.BR tuya:status ,
-and
-.BR tuya:heartbeat :
+.B tuya-devices.lsp
+provides
+.B TuyaDevice
+(base class, mirrors tinytuya's Device) and device subclasses.
+The base class wraps the C functions into obj:method form:
 .PP
 .RS
 .nf
-(load "seatuya.lsp")
-(setq dev (tuya:create device-id "192.168.1.50" local-key "3.3"))
-(tuya:set-value dev 1 true)     ; turn on DP 1
-(tuya:status dev)                ; query all DPs
-(tuya:destroy dev)
+(load "tuya-devices.lsp")
+(new TuyaDevice 'd)
+(d "3.3" "192.168.1.50" device-id local-key)
+(d:set-value 1 true)            ; turn on DP 1
+(d:status)                       ; query all DPs
+(d:destroy)
+(delete 'd)
 .fi
 .RE
 .SS newLISP device classes
 .B tuya-devices.lsp
-provides device-class convenience functions using newLISP's
-context-based OOP
-.RB ( new / delete ).
-Each class maps named methods to the correct data point numbers
+also provides device subclasses (derived from
+.B TuyaDevice
+via
+.BR new ).
+Each subclass maps named methods to the correct data point numbers
 for that device category:
 .PP
 .RS
