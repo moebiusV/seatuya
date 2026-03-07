@@ -95,6 +95,16 @@ library once, and every language gets Tuya for free.
    API parsing, you get the new behavior whether you wanted it or
    not.  seatuya's ABI does not change out from under you.
 
+7. **Familiar API -- if you know tinytuya, you know seatuya.**  The
+   function names, argument order, and semantics deliberately mirror
+   tinytuya's `Device` class: `tuya_create`, `tuya_set_credentials`,
+   `tuya_connect`, `tuya_turn_on`, `tuya_status`, `tuya_set_value_int`,
+   etc.  Anyone who has used tinytuya can read seatuya code (C or
+   newLISP) and understand it immediately, and vice versa.  The API
+   mapping table in the "Device classes" section below shows the
+   correspondence line by line.  This means porting tinytuya scripts
+   to C or newLISP is mechanical translation, not a learning curve.
+
 ## What is included
 
 **Library (C ABI):**
@@ -298,6 +308,69 @@ seatuya mirrors this in two layers:
 Read-only devices like humidity sensors or air quality monitors work
 through `:status` on any device class but lack named getters.  There is
 no generic `SensorDevice` yet.
+
+### API mapping
+
+The API mirrors tinytuya's `Device` class closely enough that the
+mapping is mechanical.  If you know tinytuya, you already know
+seatuya -- just change the syntax.
+
+**Base Device (lifecycle and connection):**
+
+| tinytuya (Python) | seatuya (C) | seatuya (newLISP) |
+|--------------------|-------------|---------------------|
+| `Device(id, addr, key, ver)` | `tuya_create(ver)` | `(tuya:create ver)` |
+| *(constructor stores creds)* | `tuya_set_credentials(dev, id, key)` | `(tuya:set-credentials dev id key)` |
+| *(constructor connects)* | `tuya_connect(dev, addr)` | `(tuya:connect dev addr)` |
+| *(auto for 3.4+)* | `tuya_negotiate_session(dev, key)` | `(tuya:negotiate-session dev key)` |
+| `d.close()` | `tuya_disconnect(dev)` | `(tuya:disconnect dev)` |
+| *(del d)* | `tuya_destroy(dev)` | `(tuya:destroy dev)` |
+
+**High-level operations (full round-trip):**
+
+| tinytuya (Python) | seatuya (C) | seatuya (newLISP) |
+|--------------------|-------------|---------------------|
+| `d.turn_on(switch)` | `tuya_turn_on(dev, dp)` | `(tuya:turn-on dev dp)` |
+| `d.turn_off(switch)` | `tuya_turn_off(dev, dp)` | `(tuya:turn-off dev dp)` |
+| `d.set_value(dp, value)` | `tuya_set_value_bool(dev, dp, val)` | `(tuya:set-value dev dp val)` |
+| | `tuya_set_value_int(dev, dp, val)` | *(type auto-detected)* |
+| | `tuya_set_value_string(dev, dp, val)` | |
+| | `tuya_set_value_float(dev, dp, val)` | |
+| `d.status()` | `tuya_status(dev)` | `(tuya:status dev)` |
+| `d.heartbeat()` | `tuya_heartbeat(dev)` | `(tuya:heartbeat dev)` |
+| *(reconnect logic in set_status)* | `tuya_reconnect(dev)` | `(tuya:reconnect dev)` |
+
+**Credential and state getters:**
+
+| tinytuya (Python) | seatuya (C) | seatuya (newLISP) |
+|--------------------|-------------|---------------------|
+| `d.id` | `tuya_get_device_id(dev)` | `(tuya:get-device-id dev)` |
+| `d.local_key` | `tuya_get_local_key(dev)` | `(tuya:get-local-key dev)` |
+| `d.address` | `tuya_get_ip(dev)` | `(tuya:get-ip dev)` |
+| *(n/a)* | `tuya_get_protocol(dev)` | `(tuya:get-protocol dev)` |
+| *(n/a)* | `tuya_get_session_state(dev)` | `(tuya:get-session-state dev)` |
+| *(n/a)* | `tuya_get_socket_state(dev)` | `(tuya:get-socket-state dev)` |
+| *(n/a)* | `tuya_get_last_error(dev)` | `(tuya:get-last-error dev)` |
+
+**Low-level (no tinytuya equivalent -- for pipelining or custom commands):**
+
+| seatuya (C) | seatuya (newLISP) |
+|-------------|---------------------|
+| `tuya_generate_payload(dev, cmd, id, dps)` | `(tuya:generate-payload dev cmd id dps)` |
+| `tuya_build_message(dev, buf, cmd, payload, key)` | `(tuya:build-message dev cmd payload key)` |
+| `tuya_send(dev, buf, size)` | `(tuya:send dev buf)` |
+| `tuya_receive(dev, buf, max, min)` | `(tuya:receive dev)` |
+| `tuya_decode_message(dev, buf, size, key)` | `(tuya:decode-message dev buf key)` |
+| `tuya_free_string(str)` | *(automatic)* |
+
+tinytuya's `set_value` accepts any Python type and serializes it.
+The C API splits this into four typed functions because C has no
+dynamic typing.  The newLISP wrapper re-unifies them: `tuya:set-value`
+inspects the value and dispatches to the right C function.
+
+All `char *` returns from C are `malloc`'d.  C callers free them with
+`tuya_free_string()`.  The newLISP wrapper copies the string and frees
+the original automatically.
 
 ### Architectural difference
 
