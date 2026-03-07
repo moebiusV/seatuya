@@ -1,6 +1,7 @@
 #ifndef SEATUYA_H
 #define SEATUYA_H
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -146,9 +147,9 @@ void seatuya_destroy(seatuya_device_t *dev);
 
 /*
  * Connect to a Tuya device by hostname or IP address (port 6668).
- * Returns 1 on success, 0 on failure.
  */
-int seatuya_connect(seatuya_device_t *dev, const char *hostname);
+bool seatuya_connect(seatuya_device_t *dev,
+                                   const char *hostname);
 
 /*
  * Disconnect from the device.
@@ -156,9 +157,9 @@ int seatuya_connect(seatuya_device_t *dev, const char *hostname);
 void seatuya_disconnect(seatuya_device_t *dev);
 
 /*
- * Returns 1 if connected, 0 otherwise.
+ * Returns true if connected.
  */
-int seatuya_is_connected(seatuya_device_t *dev);
+bool seatuya_is_connected(seatuya_device_t *dev);
 
 
 /* ------------------------------------------------------------------ */
@@ -168,25 +169,24 @@ int seatuya_is_connected(seatuya_device_t *dev);
 /*
  * Perform full session negotiation (blocking).
  * For protocol 3.1/3.3 this is a no-op that returns success.
- * Returns 1 on success, 0 on failure.
  */
-int seatuya_negotiate_session(seatuya_device_t *dev, const char *local_key);
+bool seatuya_negotiate_session(seatuya_device_t *dev,
+                                             const char *local_key);
 
 /*
  * Start session negotiation (async-friendly).
- * Returns 1 on success, 0 on failure.
  */
-int seatuya_negotiate_session_start(seatuya_device_t *dev,
-                                    const char *local_key);
+bool seatuya_negotiate_session_start(seatuya_device_t *dev,
+                                                   const char *local_key);
 
 /*
  * Finalize session negotiation with device response data.
  * buf/size: the raw response received from the device.
- * Returns 1 on success, 0 on failure.
  */
-int seatuya_negotiate_session_finalize(seatuya_device_t *dev,
-                                       unsigned char *buf, int size,
-                                       const char *local_key);
+bool seatuya_negotiate_session_finalize(seatuya_device_t *dev,
+                                                      unsigned char *buf,
+                                                      int size,
+                                                      const char *local_key);
 
 
 /* ------------------------------------------------------------------ */
@@ -207,24 +207,23 @@ int seatuya_get_last_error(seatuya_device_t *dev);
  * Enable or disable asynchronous socket mode.
  * When enabled, receive() returns immediately if no data is available.
  */
-void seatuya_set_async_mode(seatuya_device_t *dev, int async);
+void seatuya_set_async_mode(seatuya_device_t *dev, bool async);
 
 /*
- * Returns 1 if the socket has data available to read.
+ * Returns true if the socket has data available to read.
  */
-int seatuya_is_socket_readable(seatuya_device_t *dev);
+bool seatuya_is_socket_readable(seatuya_device_t *dev);
 
 /*
- * Returns 1 if the socket is ready for writing.
+ * Returns true if the socket is ready for writing.
  */
-int seatuya_is_socket_writable(seatuya_device_t *dev);
+bool seatuya_is_socket_writable(seatuya_device_t *dev);
 
 /*
  * Mark the session as ready (call after connection + negotiation in
  * async mode for protocol 3.4+).
- * Returns 1 on success, 0 if socket was not in CONNECTED state.
  */
-int seatuya_set_session_ready(seatuya_device_t *dev);
+bool seatuya_set_session_ready(seatuya_device_t *dev);
 
 
 /* ------------------------------------------------------------------ */
@@ -239,9 +238,11 @@ int seatuya_set_session_ready(seatuya_device_t *dev);
  * key:     device local key (encryption key)
  * Returns message size in bytes, or -1 on error.
  */
-int seatuya_build_message(seatuya_device_t *dev, unsigned char *buf,
-                          enum seatuya_command cmd, const char *payload,
-                          const char *key);
+int seatuya_build_message(seatuya_device_t *dev,
+                                        unsigned char *buf,
+                                        enum seatuya_command cmd,
+                                        const char *payload,
+                                        const char *key);
 
 /*
  * Decode a received Tuya protocol message.
@@ -250,8 +251,9 @@ int seatuya_build_message(seatuya_device_t *dev, unsigned char *buf,
  * Returns a newly allocated JSON string, or NULL on error.
  * Caller must free the result with seatuya_free_string().
  */
-char *seatuya_decode_message(seatuya_device_t *dev, unsigned char *buf,
-                             int size, const char *key);
+char *seatuya_decode_message(seatuya_device_t *dev,
+                                           unsigned char *buf, int size,
+                                           const char *key);
 
 /*
  * Generate a JSON payload for a command.
@@ -262,9 +264,9 @@ char *seatuya_decode_message(seatuya_device_t *dev, unsigned char *buf,
  * Caller must free the result with seatuya_free_string().
  */
 char *seatuya_generate_payload(seatuya_device_t *dev,
-                               enum seatuya_command cmd,
-                               const char *device_id,
-                               const char *datapoints);
+                                             enum seatuya_command cmd,
+                                             const char *device_id,
+                                             const char *datapoints);
 
 
 /* ------------------------------------------------------------------ */

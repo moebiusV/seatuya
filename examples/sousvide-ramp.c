@@ -29,12 +29,13 @@
 
 #include <seatuya.h>
 
+#include <math.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-#include <math.h>
 
 /* ------------------------------------------------------------------ */
 /*  Inkbird sous vide DPS mapping (ISV-100W / ISV-200W)               */
@@ -263,7 +264,7 @@ main(int argc, char *argv[])
 	double start_f = 90.0;
 	double end_f = 145.0;
 	int ramp_minutes = 45;
-	int dry_run = 0;
+	bool dry_run = false;
 	char config_path[512];
 	int opt;
 
@@ -285,7 +286,7 @@ main(int argc, char *argv[])
 		case 'e': end_f = atof(optarg); break;
 		case 't': ramp_minutes = atoi(optarg); break;
 		case 'c': strncpy(config_path, optarg, sizeof(config_path) - 1); break;
-		case 'n': dry_run = 1; break;
+		case 'n': dry_run = true; break;
 		default:
 			usage(argv[0]);
 			return (opt == 'h') ? 0 : 1;

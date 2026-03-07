@@ -24,6 +24,14 @@ Makefile.in
 # Test binaries
 /tests/test_seatuya
 
+# Example binaries
+/examples/seatuya-wizard
+/examples/seatuya-wizard-openssl
+/examples/sousvide-ramp
+
+# Editor backups
+*~
+
 # Distribution tarballs
 *.tar.gz
 *.tar.xz

@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include <seatuya.h>
@@ -73,7 +74,7 @@ test_initial_state(void)
 	check("initial socket state is DISCONNECTED",
 	      seatuya_get_socket_state(dev) == SEATUYA_SOCK_DISCONNECTED);
 	check("not connected initially",
-	      seatuya_is_connected(dev) == 0);
+	      !seatuya_is_connected(dev));
 
 	seatuya_destroy(dev);
 }
@@ -84,10 +85,10 @@ test_null_safety(void)
 	/* None of these should crash */
 	seatuya_destroy(NULL);
 	seatuya_disconnect(NULL);
-	check("is_connected(NULL) returns 0",
-	      seatuya_is_connected(NULL) == 0);
-	check("connect(NULL) returns 0",
-	      seatuya_connect(NULL, "localhost") == 0);
+	check("is_connected(NULL) returns false",
+	      !seatuya_is_connected(NULL));
+	check("connect(NULL) returns false",
+	      !seatuya_connect(NULL, "localhost"));
 	check("get_last_error(NULL) returns -1",
 	      seatuya_get_last_error(NULL) == -1);
 	check("build_message(NULL) returns -1",

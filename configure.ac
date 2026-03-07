@@ -63,6 +63,77 @@ AM_CONDITIONAL([BUNDLED_JSONCPP], [test "x$use_bundled_jsoncpp" = "xyes"])
 PKG_CHECK_MODULES([OPENSSL], [openssl], [],
     [AC_MSG_ERROR([OpenSSL not found. Try: sudo apt-get install libssl-dev])])
 
+# ---------- libtls (optional, for seatuya-wizard) ----------
+
+AC_ARG_WITH([libtls],
+    [AS_HELP_STRING([--with-libtls],
+        [use libtls instead of OpenSSL BIO for HTTPS in seatuya-wizard])],
+    [with_libtls=$withval],
+    [with_libtls=auto])
+
+use_libtls=no
+if test "x$with_libtls" != "xno"; then
+    PKG_CHECK_MODULES([LIBTLS], [libtls], [use_libtls=yes], [
+        if test "x$with_libtls" = "xyes"; then
+            AC_MSG_ERROR([libtls requested but not found])
+        fi
+    ])
+fi
+AM_CONDITIONAL([USE_LIBTLS], [test "x$use_libtls" = "xyes"])
+if test "x$use_libtls" = "xyes"; then
+    AC_DEFINE([HAVE_LIBTLS], [1], [Define if libtls is available])
+fi
+AC_MSG_NOTICE([seatuya-wizard TLS backend: $(test "x$use_libtls" = "xyes" && echo libtls || echo OpenSSL)])
+
+if test "x$use_libtls" != "xyes" && test "x$with_libtls" != "xno"; then
+    AC_MSG_NOTICE([])
+    AC_MSG_NOTICE([  Tip: libtls was not found. The wizard will use OpenSSL, which works])
+    AC_MSG_NOTICE([  fine, but libtls provides a cleaner and safer TLS API. To install it:])
+    AC_MSG_NOTICE([])
+    # Detect distro and suggest the right package command
+    if test -f /etc/os-release; then
+        . /etc/os-release
+        case "$ID" in
+        ubuntu|debian|linuxmint|pop|elementary|zorin|kali|raspbian)
+            AC_MSG_NOTICE([    sudo apt-get install libtls-dev]) ;;
+        fedora)
+            AC_MSG_NOTICE([    sudo dnf install libretls-devel]) ;;
+        rhel|centos|rocky|alma|ol)
+            AC_MSG_NOTICE([    sudo dnf install libretls-devel    (from EPEL)]) ;;
+        opensuse*|suse|sles)
+            AC_MSG_NOTICE([    sudo zypper addrepo https://download.opensuse.org/repositories/security:tls/openSUSE_Tumbleweed/security:tls.repo])
+            AC_MSG_NOTICE([    sudo zypper refresh && sudo zypper install libretls-devel]) ;;
+        arch|manjaro|endeavouros|artix|garuda)
+            AC_MSG_NOTICE([    sudo pacman -S libressl]) ;;
+        alpine)
+            AC_MSG_NOTICE([    apk add libretls-dev]) ;;
+        gentoo)
+            AC_MSG_NOTICE([    sudo emerge dev-libs/libretls]) ;;
+        void)
+            AC_MSG_NOTICE([    sudo xbps-install libretls-devel]) ;;
+        nixos)
+            AC_MSG_NOTICE([    nix-env -iA nixpkgs.libretls    (or add to environment.systemPackages)]) ;;
+        slackware)
+            AC_MSG_NOTICE([    Install libtls from SlackBuilds.org]) ;;
+        *)
+            AC_MSG_NOTICE([    Install libretls or libressl from your package manager.]) ;;
+        esac
+    elif test "$(uname)" = "FreeBSD"; then
+        AC_MSG_NOTICE([    pkg install libretls])
+    elif test "$(uname)" = "OpenBSD"; then
+        AC_MSG_NOTICE([    libtls is part of base OpenBSD — it should already be available.])
+    elif test "$(uname)" = "NetBSD"; then
+        AC_MSG_NOTICE([    pkg_add libretls])
+    elif test "$(uname)" = "Darwin"; then
+        AC_MSG_NOTICE([    brew install libressl])
+    else
+        AC_MSG_NOTICE([    Install libressl or libretls from your package manager.])
+    fi
+    AC_MSG_NOTICE([])
+    AC_MSG_NOTICE([  Then re-run ./configure. To suppress this hint: ./configure --without-libtls])
+    AC_MSG_NOTICE([])
+fi
+
 # ---------- pthreads ----------
 
 AC_CHECK_LIB([pthread], [pthread_create], [PTHREAD_LIBS="-lpthread"],

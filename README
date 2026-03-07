@@ -24,9 +24,16 @@ Dependencies
 - tuyapp (fetched automatically into deps/)
 - jsoncpp (system or fetched automatically)
 - OpenSSL (system)
-- A C99 compiler
+- A C17 compiler (gcc 8+, clang 6+, MSVC 2019+)
 - A C++14 compiler (for building tuyapp internals)
 - GNU autotools (autoconf, automake, libtool) for building from git
+
+Packaging
+---------
+
+Template packaging files for RPM, Debian, Arch, Alpine, Gentoo, NixOS,
+Slackware, FreeBSD, OpenBSD, and NetBSD are provided under dist/.  See
+README.distributions for details.
 
 License
 -------

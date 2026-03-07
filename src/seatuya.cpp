@@ -65,12 +65,12 @@ seatuya_destroy(seatuya_device_t *dev)
 /*  Connection                                                        */
 /* ------------------------------------------------------------------ */
 
-extern "C" int
+extern "C" bool
 seatuya_connect(seatuya_device_t *dev, const char *hostname)
 {
 	if (!dev || !hostname)
-		return 0;
-	return dev->api->ConnectToDevice(std::string(hostname)) ? 1 : 0;
+		return false;
+	return dev->api->ConnectToDevice(std::string(hostname));
 }
 
 extern "C" void
@@ -80,12 +80,12 @@ seatuya_disconnect(seatuya_device_t *dev)
 		dev->api->disconnect();
 }
 
-extern "C" int
+extern "C" bool
 seatuya_is_connected(seatuya_device_t *dev)
 {
 	if (!dev)
-		return 0;
-	return dev->api->isConnected() ? 1 : 0;
+		return false;
+	return dev->api->isConnected();
 }
 
 
@@ -93,31 +93,31 @@ seatuya_is_connected(seatuya_device_t *dev)
 /*  Session negotiation                                               */
 /* ------------------------------------------------------------------ */
 
-extern "C" int
+extern "C" bool
 seatuya_negotiate_session(seatuya_device_t *dev, const char *local_key)
 {
 	if (!dev || !local_key)
-		return 0;
-	return dev->api->NegotiateSession(std::string(local_key)) ? 1 : 0;
+		return false;
+	return dev->api->NegotiateSession(std::string(local_key));
 }
 
-extern "C" int
+extern "C" bool
 seatuya_negotiate_session_start(seatuya_device_t *dev, const char *local_key)
 {
 	if (!dev || !local_key)
-		return 0;
-	return dev->api->NegotiateSessionStart(std::string(local_key)) ? 1 : 0;
+		return false;
+	return dev->api->NegotiateSessionStart(std::string(local_key));
 }
 
-extern "C" int
+extern "C" bool
 seatuya_negotiate_session_finalize(seatuya_device_t *dev,
                                    unsigned char *buf, int size,
                                    const char *local_key)
 {
 	if (!dev || !buf || !local_key)
-		return 0;
+		return false;
 	return dev->api->NegotiateSessionFinalize(buf, size,
-	           std::string(local_key)) ? 1 : 0;
+	           std::string(local_key));
 }
 
 
@@ -188,34 +188,34 @@ seatuya_get_last_error(seatuya_device_t *dev)
 /* ------------------------------------------------------------------ */
 
 extern "C" void
-seatuya_set_async_mode(seatuya_device_t *dev, int async)
+seatuya_set_async_mode(seatuya_device_t *dev, bool async)
 {
 	if (dev)
-		dev->api->setAsyncMode(async != 0);
+		dev->api->setAsyncMode(async);
 }
 
-extern "C" int
+extern "C" bool
 seatuya_is_socket_readable(seatuya_device_t *dev)
 {
 	if (!dev)
-		return 0;
-	return dev->api->isSocketReadable() ? 1 : 0;
+		return false;
+	return dev->api->isSocketReadable();
 }
 
-extern "C" int
+extern "C" bool
 seatuya_is_socket_writable(seatuya_device_t *dev)
 {
 	if (!dev)
-		return 0;
-	return dev->api->isSocketWritable() ? 1 : 0;
+		return false;
+	return dev->api->isSocketWritable();
 }
 
-extern "C" int
+extern "C" bool
 seatuya_set_session_ready(seatuya_device_t *dev)
 {
 	if (!dev)
-		return 0;
-	return dev->api->setSessionReady() ? 1 : 0;
+		return false;
+	return dev->api->setSessionReady();
 }
 
 

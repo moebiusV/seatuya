@@ -4,7 +4,7 @@ Installation Instructions
 Prerequisites:
 
     - tuyapp C++ library (installed and discoverable by the linker)
-    - C99 compiler (gcc, clang)
+    - C17 compiler (gcc 8+, clang 6+, MSVC 2019+)
     - C++ compiler (for linking)
     - GNU autotools (autoconf >= 2.69, automake, libtool)
 
