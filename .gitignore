@@ -27,3 +27,6 @@ Makefile.in
 # Distribution tarballs
 *.tar.gz
 *.tar.xz
+
+# Fetched dependencies (not shipped — see fetch-deps.sh)
+/deps/

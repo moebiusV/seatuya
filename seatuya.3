@@ -5,16 +5,73 @@ seatuya \- C wrapper for the tuyapp Tuya library
 .B #include <seatuya/seatuya.h>
 .PP
 .BI "const char *seatuya_version(void);"
+.PP
+.BI "seatuya_device_t *seatuya_create(const char *" version ");"
+.br
+.BI "void seatuya_destroy(seatuya_device_t *" dev ");"
+.PP
+.BI "int seatuya_connect(seatuya_device_t *" dev ", const char *" hostname ");"
+.br
+.BI "void seatuya_disconnect(seatuya_device_t *" dev ");"
+.br
+.BI "int seatuya_is_connected(seatuya_device_t *" dev ");"
+.PP
+.BI "int seatuya_negotiate_session(seatuya_device_t *" dev ", const char *" key ");"
+.PP
+.BI "int seatuya_build_message(seatuya_device_t *" dev ", unsigned char *" buf ","
+.BI "    enum seatuya_command " cmd ", const char *" payload ", const char *" key ");"
+.br
+.BI "char *seatuya_decode_message(seatuya_device_t *" dev ", unsigned char *" buf ","
+.BI "    int " size ", const char *" key ");"
+.br
+.BI "char *seatuya_generate_payload(seatuya_device_t *" dev ","
+.BI "    enum seatuya_command " cmd ", const char *" device_id ","
+.BI "    const char *" datapoints ");"
+.PP
+.BI "int seatuya_send(seatuya_device_t *" dev ", unsigned char *" buf ", int " size ");"
+.br
+.BI "int seatuya_receive(seatuya_device_t *" dev ", unsigned char *" buf ","
+.BI "    int " maxsize ", int " minsize ");"
+.PP
+.BI "void seatuya_free_string(char *" str ");"
 .SH DESCRIPTION
 .B seatuya
-provides a pure C API wrapping the tuyapp C++ library for
-communicating with Tuya smart devices.
+provides a pure C API wrapping the tuyapp C++ library for local
+communication with Tuya smart devices.
 .PP
-.BR seatuya_version ()
-returns a string containing the library version.
+.BR seatuya_create ()
+creates a device handle for the given protocol version
+("3.1", "3.3", "3.4", or "3.5").
+Returns NULL on invalid version.
+.PP
+.BR seatuya_connect ()
+opens a TCP connection to the device on port 6668.
+For protocol 3.4 and above, call
+.BR seatuya_negotiate_session ()
+after connecting.
+.PP
+.BR seatuya_build_message ()
+encrypts and frames a JSON payload for transmission.
+.BR seatuya_decode_message ()
+decrypts a received response.
+Both require the device's local encryption key.
+.PP
+Strings returned by
+.BR seatuya_decode_message ()
+and
+.BR seatuya_generate_payload ()
+must be freed with
+.BR seatuya_free_string ().
 .SH RETURN VALUES
-.BR seatuya_version ()
-returns a pointer to a static string. The caller must not free it.
+Functions returning
+.B int
+use 1 for success and 0 for failure, unless documented otherwise.
+.BR seatuya_build_message ()
+returns the message size or \-1 on error.
+.BR seatuya_send ()
+and
+.BR seatuya_receive ()
+return byte counts or \-1 on error.
 .SH SEE ALSO
 .BR tuyapp (3)
 .SH AUTHORS
