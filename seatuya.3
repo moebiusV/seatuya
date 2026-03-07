@@ -1,0 +1,21 @@
+.TH SEATUYA 3 "2026-03-06" "seatuya 0.1.0" "Library Functions Manual"
+.SH NAME
+seatuya \- C wrapper for the tuyapp Tuya library
+.SH SYNOPSIS
+.B #include <seatuya/seatuya.h>
+.PP
+.BI "const char *seatuya_version(void);"
+.SH DESCRIPTION
+.B seatuya
+provides a pure C API wrapping the tuyapp C++ library for
+communicating with Tuya smart devices.
+.PP
+.BR seatuya_version ()
+returns a string containing the library version.
+.SH RETURN VALUES
+.BR seatuya_version ()
+returns a pointer to a static string. The caller must not free it.
+.SH SEE ALSO
+.BR tuyapp (3)
+.SH AUTHORS
+David Walther <david@clearbrookdistillery.com>

@@ -1,0 +1,29 @@
+# Autotools generated
+/aclocal.m4
+/autom4te.cache/
+/build-aux/
+/config.h
+/config.h.in
+/config.h.in~
+/config.log
+/config.status
+/configure
+/libtool
+/m4/
+/stamp-h1
+Makefile
+Makefile.in
+
+# Compiled objects
+*.o
+*.lo
+*.la
+.libs/
+.deps/
+
+# Test binaries
+/tests/test_seatuya
+
+# Distribution tarballs
+*.tar.gz
+*.tar.xz

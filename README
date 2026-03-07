@@ -1,0 +1,27 @@
+seatuya
+=======
+
+A C wrapper library for tuyapp, providing a pure C API for Tuya
+smart-device communication.
+
+Building
+--------
+
+    autoreconf -fi
+    ./configure
+    make
+    make check
+    make install
+
+Dependencies
+------------
+
+- tuyapp (C++ Tuya library)
+- A C99 compiler
+- A C++ compiler (for linking against tuyapp)
+- GNU autotools (autoconf, automake, libtool) for building from git
+
+License
+-------
+
+BSD-2-Clause. See COPYING for details.

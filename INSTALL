@@ -1,0 +1,27 @@
+Installation Instructions
+=========================
+
+Prerequisites:
+
+    - tuyapp C++ library (installed and discoverable by the linker)
+    - C99 compiler (gcc, clang)
+    - C++ compiler (for linking)
+    - GNU autotools (autoconf >= 2.69, automake, libtool)
+
+Quick install:
+
+    autoreconf -fi
+    ./configure
+    make
+    make check
+    sudo make install
+
+The library installs to $prefix/lib and headers to $prefix/include/seatuya.
+
+To specify an install prefix:
+
+    ./configure --prefix=/usr/local
+
+To uninstall:
+
+    sudo make uninstall
