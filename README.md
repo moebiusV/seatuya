@@ -275,7 +275,7 @@ tuya_free_string(payload);
 tuya_send(dev, buf, n);
 n = tuya_receive(dev, buf, sizeof buf, 0);
 char *response = tuya_decode_message(dev, buf, n, local_key);
-/* response is the device's JSON reply */
+/* ... use response (the device's JSON reply) ... */
 tuya_free_string(response);
 ```
 
@@ -287,6 +287,7 @@ library wraps the entire cycle into single-call functions:
 ```c
 /* same thing, high-level API */
 char *response = tuya_turn_on(dev, 1);
+/* ... use response ... */
 tuya_free_string(response);
 ```
 
