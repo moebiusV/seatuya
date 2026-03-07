@@ -29,41 +29,49 @@ test_create_destroy(void)
 {
 	tuya_device_t *dev;
 
-	dev = tuya_create("3.3");
-	check("create v3.3 succeeds", dev != NULL);
+	dev = tuya_alloc("3.3");
+	check("alloc v3.3 succeeds", dev != NULL);
 	if (dev) {
 		check("protocol is v3.3",
 		      tuya_get_protocol(dev) == TUYA_PROTO_V33);
 		tuya_destroy(dev);
 	}
 
-	dev = tuya_create("3.4");
-	check("create v3.4 succeeds", dev != NULL);
+	dev = tuya_alloc("3.4");
+	check("alloc v3.4 succeeds", dev != NULL);
 	if (dev) {
 		check("protocol is v3.4",
 		      tuya_get_protocol(dev) == TUYA_PROTO_V34);
 		tuya_destroy(dev);
 	}
 
-	dev = tuya_create("3.5");
-	check("create v3.5 succeeds", dev != NULL);
+	dev = tuya_alloc("3.5");
+	check("alloc v3.5 succeeds", dev != NULL);
 	if (dev) {
 		check("protocol is v3.5",
 		      tuya_get_protocol(dev) == TUYA_PROTO_V35);
 		tuya_destroy(dev);
 	}
 
-	dev = tuya_create("9.9");
+	dev = tuya_alloc("9.9");
+	check("alloc invalid version returns NULL", dev == NULL);
+
+	dev = tuya_alloc(NULL);
+	check("alloc NULL version returns NULL", dev == NULL);
+
+	/* tuya_open with invalid version returns NULL */
+	dev = tuya_create("id", "addr", "key", "9.9");
 	check("create invalid version returns NULL", dev == NULL);
 
-	dev = tuya_create(NULL);
-	check("create NULL version returns NULL", dev == NULL);
+	/* tuya_open with unreachable host returns NULL */
+	dev = tuya_create("id", "192.0.2.1", "key", "3.3");
+	check("create unreachable host returns NULL", dev == NULL);
 }
 
 static void
 test_initial_state(void)
 {
-	tuya_device_t *dev = tuya_create("3.3");
+	tuya_device_t *dev = tuya_alloc("3.3");
 	if (!dev) {
 		printf("  SKIP: could not create device\n");
 		return;
@@ -82,7 +90,7 @@ test_initial_state(void)
 static void
 test_credentials(void)
 {
-	tuya_device_t *dev = tuya_create("3.3");
+	tuya_device_t *dev = tuya_alloc("3.3");
 	if (!dev) {
 		printf("  SKIP: could not create device\n");
 		return;
@@ -117,7 +125,7 @@ static void
 test_high_level_null_safety(void)
 {
 	/* High-level functions with no credentials should return NULL */
-	tuya_device_t *dev = tuya_create("3.3");
+	tuya_device_t *dev = tuya_alloc("3.3");
 	if (!dev) {
 		printf("  SKIP: could not create device\n");
 		return;

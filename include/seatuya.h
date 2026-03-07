@@ -134,11 +134,23 @@ typedef struct tuya_device tuya_device_t;
  */
 
 /*
- * Create a device handle for the given protocol version.
+ * Create a device handle, store credentials, connect, and negotiate
+ * session -- the full setup in one call.  Equivalent to tinytuya's
+ * Device(dev_id, address, local_key, version) constructor.
+ * Returns NULL on failure (invalid version, connection error, or
+ * session negotiation failure).
+ */
+tuya_device_t *tuya_create(const char *device_id, const char *address,
+                           const char *local_key, const char *version);
+
+/*
+ * Allocate a device handle without connecting.
  * version: one of "3.1", "3.3", "3.4", "3.5"
  * Returns NULL on invalid version.
+ * For incremental setup: call tuya_set_credentials() and
+ * tuya_connect() separately.
  */
-tuya_device_t *tuya_create(const char *version);
+tuya_device_t *tuya_alloc(const char *version);
 
 /*
  * Destroy a device handle and free all resources.

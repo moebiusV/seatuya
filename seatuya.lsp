@@ -21,6 +21,7 @@
 
 (import LIB "tuya_version")
 (import LIB "tuya_create")
+(import LIB "tuya_alloc")
 (import LIB "tuya_destroy")
 (import LIB "tuya_set_credentials")
 (import LIB "tuya_get_device_id")
@@ -152,8 +153,15 @@
 (define (version)
   (get-string (tuya_version)))
 
-(define (create ver)
-  (let (ptr (tuya_create ver))
+(define (create device-id address local-key ver)
+  "Create handle, store credentials, connect, and negotiate session.
+   Returns handle or nil on failure."
+  (let (ptr (tuya_create device-id address local-key ver))
+    (if (!= ptr 0) ptr nil)))
+
+(define (alloc ver)
+  "Allocate handle without connecting (for incremental setup)."
+  (let (ptr (tuya_alloc ver))
     (if (!= ptr 0) ptr nil)))
 
 (define (destroy dev)

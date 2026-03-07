@@ -24,17 +24,9 @@
 (define (tuya-devices:connect-device version ip device-id local-key)
   "Create handle, store credentials, connect, negotiate session.
    Returns handle or throws on failure."
-  (let (dev (tuya:create version))
-    (unless dev (throw (string "unsupported protocol version: " version)))
-    (tuya:set-credentials dev device-id local-key)
-    (unless (tuya:connect dev ip)
-      (tuya:destroy dev)
-      (throw (string "connection failed to " ip)))
-    (when (>= (tuya:get-protocol dev) tuya:PROTO_V34)
-      (unless (tuya:negotiate-session dev local-key)
-        (tuya:disconnect dev)
-        (tuya:destroy dev)
-        (throw "session negotiation failed")))
+  (let (dev (tuya:create device-id ip local-key version))
+    (unless dev
+      (throw (string "tuya:create failed for " device-id " at " ip)))
     dev))
 
 (define (tuya-devices:reconnect-device dev)

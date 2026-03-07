@@ -39,7 +39,31 @@ tuya_version(void)
 /* ------------------------------------------------------------------ */
 
 extern "C" tuya_device_t *
-tuya_create(const char *version)
+tuya_create(const char *device_id, const char *address,
+            const char *local_key, const char *version)
+{
+	tuya_device_t *dev = tuya_alloc(version);
+	if (!dev)
+		return NULL;
+
+	tuya_set_credentials(dev, device_id, local_key);
+
+	if (!tuya_connect(dev, address)) {
+		tuya_destroy(dev);
+		return NULL;
+	}
+
+	if (!tuya_negotiate_session(dev, local_key)) {
+		tuya_disconnect(dev);
+		tuya_destroy(dev);
+		return NULL;
+	}
+
+	return dev;
+}
+
+extern "C" tuya_device_t *
+tuya_alloc(const char *version)
 {
 	if (!version)
 		return NULL;

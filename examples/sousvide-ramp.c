@@ -271,32 +271,13 @@ main(int argc, char *argv[])
 	printf("device: %s @ %s (protocol %s)\n",
 	    cfg.device_id, cfg.ip, cfg.version);
 
-	/* Create device, store credentials, connect */
-	tuya_device_t *dev = tuya_create(cfg.version);
-	if (!dev) {
-		fprintf(stderr, "error: unsupported protocol version: %s\n",
-		    cfg.version);
-		return 1;
-	}
-
-	tuya_set_credentials(dev, cfg.device_id, cfg.local_key);
-
+	/* Connect to device */
 	printf("connecting to %s...\n", cfg.ip);
-	if (!tuya_connect(dev, cfg.ip)) {
-		fprintf(stderr, "error: connection failed (errno %d)\n",
-		    tuya_get_last_error(dev));
-		tuya_destroy(dev);
+	tuya_device_t *dev = tuya_create(cfg.device_id, cfg.ip,
+	    cfg.local_key, cfg.version);
+	if (!dev) {
+		fprintf(stderr, "error: failed to connect to %s\n", cfg.ip);
 		return 1;
-	}
-
-	if (tuya_get_protocol(dev) >= TUYA_PROTO_V34) {
-		printf("negotiating session...\n");
-		if (!tuya_negotiate_session(dev, cfg.local_key)) {
-			fprintf(stderr, "error: session negotiation failed\n");
-			tuya_disconnect(dev);
-			tuya_destroy(dev);
-			return 1;
-		}
 	}
 
 	/* Query current status */

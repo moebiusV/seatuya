@@ -83,8 +83,8 @@ different niche: a C ABI that any language can call.
 
 7. **Familiar API -- if you know tinytuya, you know seatuya.**  The
    function names, argument order, and semantics deliberately mirror
-   tinytuya's `Device` class: `tuya_create`, `tuya_set_credentials`,
-   `tuya_connect`, `tuya_turn_on`, `tuya_status`, `tuya_set_value_int`,
+   tinytuya's `Device` class: `tuya_create`, `tuya_turn_on`,
+   `tuya_status`, `tuya_set_value_int`, `tuya_reconnect`,
    etc.  Anyone who has used tinytuya can read seatuya code (C or
    newLISP) and understand it immediately, and vice versa.  The API
    mapping table in the "Device classes" section below shows the
@@ -189,10 +189,7 @@ like in practice.  Once loaded, controlling a device reads like this:
 ```newlisp
 (load "seatuya.lsp")
 
-(setq dev (tuya:create "3.4"))
-(tuya:set-credentials dev device-id local-key)
-(tuya:connect dev "192.168.1.100")
-(tuya:negotiate-session dev local-key)
+(setq dev (tuya:create device-id "192.168.1.100" local-key "3.4"))
 
 ; turn on switch (data point 1)
 (println (tuya:turn-on dev 1))
@@ -214,10 +211,8 @@ For comparison, the same thing in C:
 #include <seatuya/seatuya.h>
 #include <stdio.h>
 
-tuya_device_t *dev = tuya_create("3.4");
-tuya_set_credentials(dev, device_id, local_key);
-tuya_connect(dev, "192.168.1.100");
-tuya_negotiate_session(dev, local_key);
+tuya_device_t *dev = tuya_create(device_id, "192.168.1.100",
+    local_key, "3.4");
 
 /* turn on switch (data point 1) */
 char *resp = tuya_turn_on(dev, 1);
@@ -375,10 +370,11 @@ seatuya -- just change the syntax.
 
 | tinytuya (Python) | seatuya (C) | seatuya (newLISP) |
 |--------------------|-------------|---------------------|
-| `Device(id, addr, key, ver)` | `tuya_create(ver)` | `(tuya:create ver)` |
-| *(constructor stores creds)* | `tuya_set_credentials(dev, id, key)` | `(tuya:set-credentials dev id key)` |
-| *(constructor connects)* | `tuya_connect(dev, addr)` | `(tuya:connect dev addr)` |
-| *(auto for 3.4+)* | `tuya_negotiate_session(dev, key)` | `(tuya:negotiate-session dev key)` |
+| `Device(id, addr, key, ver)` | `tuya_create(id, addr, key, ver)` | `(tuya:create id addr key ver)` |
+| *(incremental setup)* | `tuya_alloc(ver)` | `(tuya:alloc ver)` |
+| *(incremental setup)* | `tuya_set_credentials(dev, id, key)` | `(tuya:set-credentials dev id key)` |
+| *(incremental setup)* | `tuya_connect(dev, addr)` | `(tuya:connect dev addr)` |
+| *(incremental setup)* | `tuya_negotiate_session(dev, key)` | `(tuya:negotiate-session dev key)` |
 | `d.close()` | `tuya_disconnect(dev)` | `(tuya:disconnect dev)` |
 | *(del d)* | `tuya_destroy(dev)` | `(tuya:destroy dev)` |
 

@@ -6,7 +6,11 @@ seatuya \- C library for local control of Tuya smart devices
 .PP
 .BI "const char *tuya_version(void);"
 .PP
-.BI "tuya_device_t *tuya_create(const char *" version ");"
+.BI "tuya_device_t *tuya_create(const char *" device_id ","
+.BI "    const char *" address ", const char *" local_key ","
+.BI "    const char *" version ");"
+.br
+.BI "tuya_device_t *tuya_alloc(const char *" version ");"
 .br
 .BI "void tuya_destroy(tuya_device_t *" dev ");"
 .PP
@@ -116,9 +120,22 @@ give full control over each step.
 Useful for pipelining, async workflows, or custom command types.
 .SS Lifecycle
 .BR tuya_create ()
-allocates a device handle for the given protocol version
-("3.1", "3.3", "3.4", or "3.5").
+creates a device handle, stores credentials, connects, and
+negotiates the session -- the full setup in one call.
+Returns NULL on failure.
+This is equivalent to tinytuya's
+.B Device(dev_id, address, local_key, version)
+constructor.
+.PP
+.BR tuya_alloc ()
+allocates a device handle without connecting (for incremental
+setup with separate
+.BR tuya_set_credentials ()
+and
+.BR tuya_connect ()
+calls).
 Returns NULL on invalid version.
+.PP
 The handle must be freed with
 .BR tuya_destroy ().
 .SS Credentials
@@ -248,10 +265,8 @@ Connect to a device and turn on data point 1 (high-level API):
 .PP
 .RS
 .nf
-tuya_device_t *dev = tuya_create("3.4");
-tuya_set_credentials(dev, device_id, local_key);
-tuya_connect(dev, "192.168.1.100");
-tuya_negotiate_session(dev, local_key);
+tuya_device_t *dev = tuya_create(device_id, "192.168.1.100",
+    local_key, "3.4");
 
 char *resp = tuya_turn_on(dev, 1);
 printf("%s\\n", resp);
@@ -269,7 +284,7 @@ The same using the low-level API:
 .PP
 .RS
 .nf
-tuya_device_t *dev = tuya_create("3.4");
+tuya_device_t *dev = tuya_alloc("3.4");
 tuya_connect(dev, "192.168.1.100");
 tuya_negotiate_session(dev, local_key);
 
@@ -312,9 +327,7 @@ and
 .RS
 .nf
 (load "seatuya.lsp")
-(setq dev (tuya:create "3.3"))
-(tuya:set-credentials dev device-id local-key)
-(tuya:connect dev "192.168.1.50")
+(setq dev (tuya:create device-id "192.168.1.50" local-key "3.3"))
 (tuya:set-value dev 1 true)     ; turn on DP 1
 (tuya:status dev)                ; query all DPs
 (tuya:destroy dev)
