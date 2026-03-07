@@ -78,5 +78,6 @@ AC_TYPE_UINT32_T
 AC_CONFIG_FILES([Makefile
                  src/Makefile
                  include/Makefile
-                 tests/Makefile])
+                 tests/Makefile
+                 examples/Makefile])
 AC_OUTPUT
