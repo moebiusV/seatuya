@@ -27,18 +27,21 @@ enumeration, UDP scanning, config generation -- in a language the Tuya
 developers have never heard of.  That is the point: write the C
 library once, and every language gets Tuya for free.
 
-## Advantages over tinytuya and tuyapp
+## Why use seatuya?
+
+tinytuya and tuyapp are excellent libraries -- seatuya is built on
+their work and would not exist without them.  seatuya fills a
+different niche: a C ABI that any language can call.
 
 1. **No runtime dependencies.**  seatuya-wizard is a statically-linked
-   binary.  Copy it to a machine and run it.  No Python, no pip, no
-   venv, no `requirements.txt`, no resolving version conflicts between
-   cryptography, pyOpenSSL, requests, and urllib3.  It works on a bare
+   binary.  Copy it to a machine and run it.  No interpreter, no
+   package manager, no dependency resolution.  It works on a bare
    Debian container, a FreeBSD jail, or a Raspberry Pi with nothing
-   installed.  tinytuya pulls in 15+ transitive Python packages and
-   breaks when any of them ships an incompatible update.
+   installed.
 
-2. **Any language gets Tuya for free.**  tuyapp locks you into C++,
-   tinytuya locks you into Python.  seatuya exposes opaque handles,
+2. **Any language gets Tuya for free.**  tuyapp is C++ and tinytuya
+   is Python -- both are great in their ecosystems, but not every
+   project uses those languages.  seatuya exposes opaque handles,
    C strings, and ints across the ABI boundary.  If your language can
    call `dlopen`, it can control Tuya devices.  The newLISP modules
    prove this: under 300 lines of FFI wrapping, and a language with zero
@@ -61,9 +64,7 @@ library once, and every language gets Tuya for free.
 4. **Portable across every major platform.**  Builds with standard
    autotools on Linux (any distribution), macOS, FreeBSD, OpenBSD,
    NetBSD, and Windows.  Starter packaging for 10 distributions is
-   included under `dist/`.  tinytuya only works where Python works
-   well, which excludes embedded systems, minimal containers, and
-   BSDs where Python packaging is a constant headache.
+   included under `dist/`.
 
 5. **Self-contained wizard that uses your system's SSL.**  Tuya
    devices use local encryption keys that are not stored on the
@@ -71,29 +72,18 @@ library once, and every language gets Tuya for free.
    once, using your developer account credentials.  tinytuya's
    wizard does this, and so does seatuya-wizard: authenticate, pull
    your device list with local keys, then UDP-scan your network to
-   match devices to IP addresses.  The difference is what they need
-   installed.  tinytuya depends on the Python `cryptography` package,
-   which is a Rust+C hybrid that wraps the same system OpenSSL you
-   already have, adding a build-time Rust compiler requirement and a
-   separate update cycle managed through pip.  seatuya-wizard links
-   directly against the system's libcrypto and libtls (or libssl) --
-   the same libraries that sshd, curl, and your package manager
-   already depend on.  There is nothing to download, no pip, no
-   wheel compatibility matrix, no Rust toolchain.  If your system
-   can boot and install packages, it already has everything
-   seatuya-wizard needs.  The output is the same `devices.json` and
-   `tinytuya.json` that tinytuya produces, so existing workflows
-   that consume those files keep working.
+   match devices to IP addresses.  seatuya-wizard links directly
+   against the system's libcrypto and libtls (or libssl) -- the same
+   libraries that sshd, curl, and your package manager already depend
+   on.  The output is the same `devices.json` and `tinytuya.json`
+   that tinytuya produces, so existing workflows that consume those
+   files keep working.
 
 6. **Predictable, auditable behavior.**  A C library with a manpage, a
-   clean header, and no magic.  No monkey-patching, no dynamic
-   dispatch, no import-time side effects.  The entire public API
-   fits in one header file.  You can read it, understand it, and
-   trust it on a system where reliability matters -- a production
-   IoT gateway, a brewery controller, an HVAC system.  When
-   tinytuya updates and changes its internal retry logic or cloud
-   API parsing, you get the new behavior whether you wanted it or
-   not.  seatuya's ABI does not change out from under you.
+   clean header, and no magic.  The entire public API fits in one
+   header file.  You can read it, understand it, and trust it on a
+   system where reliability matters -- a production IoT gateway, a
+   brewery controller, an HVAC system.
 
 7. **Familiar API -- if you know tinytuya, you know seatuya.**  The
    function names, argument order, and semantics deliberately mirror
@@ -552,7 +542,7 @@ what makes local Tuya control possible at all.
 
 | Project | Language | Notes |
 |---------|----------|-------|
-| [tinytuya](https://github.com/jasonacox/tinytuya) | Python | The most popular local-control library. seatuya's API, device classes, DP mappings, and device subclass hierarchy are modeled directly on tinytuya. |
+| [tinytuya](https://github.com/jasonacox/tinytuya) | Python | Widely used local-control library. seatuya's API, device classes, DP mappings, and device subclass hierarchy are modeled directly on tinytuya. |
 | [tuyapp](https://github.com/rnascunha/tuyapp) | C++ | Protocol implementation that seatuya wraps. Provides the encryption, framing, and session negotiation that libseatuya exposes through a C ABI. |
 | [tuya-local](https://github.com/make-all/tuya-local) | Python | Home Assistant custom integration for local control. |
 | [tuyapi](https://github.com/codetheweb/tuyapi) | Node.js | One of the earliest local-control implementations. |
