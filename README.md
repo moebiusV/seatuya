@@ -1,13 +1,10 @@
-seatuya
-=======
+# seatuya
 
 A C wrapper library for tuyapp, providing a stable C ABI for
 controlling Tuya / Smart Life devices locally and via the cloud.
 Supports protocol versions 3.1, 3.3, 3.4, and 3.5.
 
-
-Why seatuya?
-------------
+## Why seatuya?
 
 The Tuya ecosystem already has two solid libraries: tuyapp (C++) and
 tinytuya (Python).  Both work well, but both lock you into a single
@@ -30,35 +27,33 @@ enumeration, UDP scanning, config generation -- in a language the Tuya
 developers have never heard of.  That is the point: write the C
 library once, and every language gets Tuya for free.
 
+## Advantages over tinytuya and tuyapp
 
-Advantages over tinytuya and tuyapp
-------------------------------------
-
-1. No runtime dependencies.  seatuya-wizard is a statically-linked
+1. **No runtime dependencies.**  seatuya-wizard is a statically-linked
    binary.  Copy it to a machine and run it.  No Python, no pip, no
-   venv, no requirements.txt, no resolving version conflicts between
+   venv, no `requirements.txt`, no resolving version conflicts between
    cryptography, pyOpenSSL, requests, and urllib3.  It works on a bare
    Debian container, a FreeBSD jail, or a Raspberry Pi with nothing
    installed.  tinytuya pulls in 15+ transitive Python packages and
    breaks when any of them ships an incompatible update.
 
-2. Any language gets Tuya for free.  tuyapp locks you into C++,
+2. **Any language gets Tuya for free.**  tuyapp locks you into C++,
    tinytuya locks you into Python.  seatuya exposes opaque handles,
    C strings, and ints across the ABI boundary.  If your language can
-   call dlopen, it can control Tuya devices.  The newLISP modules
+   call `dlopen`, it can control Tuya devices.  The newLISP modules
    prove this: 200 lines of FFI wrapping, and a language with zero
    IoT ecosystem gets full local control and a cloud wizard.  The
    same works for Lua, Tcl, Forth, Zig, Nim, Janet, Racket --
    whatever you prefer.
 
-3. Portable across every major platform.  Builds with standard
+3. **Portable across every major platform.**  Builds with standard
    autotools on Linux (any distribution), macOS, FreeBSD, OpenBSD,
    NetBSD, and Windows.  Starter packaging for 10 distributions is
-   included under dist/.  tinytuya only works where Python works
+   included under `dist/`.  tinytuya only works where Python works
    well, which excludes embedded systems, minimal containers, and
    BSDs where Python packaging is a constant headache.
 
-4. Self-contained wizard with no cloud SDK.  tinytuya's wizard
+4. **Self-contained wizard with no cloud SDK.**  tinytuya's wizard
    requires the requests library, a working Python SSL stack, and a
    compatible cryptography package (which itself needs Rust to
    compile from source on some platforms).  seatuya-wizard does
@@ -67,7 +62,7 @@ Advantages over tinytuya and tuyapp
    wizard needs is either in the binary or in libc.  No supply
    chain, no PyPI, no Rust toolchain surprise.
 
-5. Predictable, auditable behavior.  A C library with a manpage, a
+5. **Predictable, auditable behavior.**  A C library with a manpage, a
    clean header, and no magic.  No monkey-patching, no dynamic
    dispatch, no import-time side effects.  The entire public API
    fits in one header file.  You can read it, understand it, and
@@ -77,107 +72,119 @@ Advantages over tinytuya and tuyapp
    API parsing, you get the new behavior whether you wanted it or
    not.  seatuya's ABI does not change out from under you.
 
+## What is included
 
-What is included
-----------------
+**Library (C ABI):**
 
-Library (C ABI):
-  libseatuya.so / libseatuya.a    shared and static library
-  seatuya/seatuya.h               public header (pure C17)
-  seatuya.3                        section 3 manpage
+| File | Description |
+|------|-------------|
+| `libseatuya.so` / `libseatuya.a` | shared and static library |
+| `seatuya/seatuya.h` | public header (pure C17) |
+| `seatuya.3` | section 3 manpage |
 
-newLISP modules:
-  find-lib.lsp         cross-platform shared-library discovery
-  crypto-fast.lsp      complete libcrypto FFI wrapper (replaces
-                        the built-in crypto.lsp with native calls,
-                        caller-owned buffers, SHA3, HMAC, PBKDF2,
-                        CSPRNG)
-  libtls.lsp           libtls FFI wrapper for HTTPS
-  seatuya.lsp          newLISP bindings for libseatuya
+**newLISP modules:**
 
-Example programs (C):
-  sousvide-ramp        temperature ramp controller for Inkbird
-                        sous vide devices
-  seatuya-wizard       cloud wizard (libtls backend)
-  seatuya-wizard-openssl  cloud wizard (OpenSSL backend)
+| File | Description |
+|------|-------------|
+| `find-lib.lsp` | cross-platform shared-library discovery |
+| `crypto-fast.lsp` | complete libcrypto FFI wrapper (replaces the built-in crypto.lsp with native calls, caller-owned buffers, SHA3, HMAC, PBKDF2, CSPRNG) |
+| `libtls.lsp` | libtls FFI wrapper for HTTPS |
+| `seatuya.lsp` | newLISP bindings for libseatuya |
 
-Example programs (newLISP):
-  sousvide-ramp.lsp    same ramp controller, pure newLISP via FFI
-  seatuya-wizard.lsp   full tinytuya wizard clone in newLISP
+**Example programs (C):**
 
-Distribution packaging:
-  dist/                starter packaging for RPM, Debian, Arch,
-                        Alpine, Gentoo, Slackware, FreeBSD, OpenBSD,
-                        NetBSD, and NixOS (see README.distributions)
+| File | Description |
+|------|-------------|
+| `sousvide-ramp` | temperature ramp controller for Inkbird sous vide devices |
+| `seatuya-wizard` | cloud wizard (libtls backend) |
+| `seatuya-wizard-openssl` | cloud wizard (OpenSSL backend) |
 
+**Example programs (newLISP):**
 
-Building
---------
+| File | Description |
+|------|-------------|
+| `sousvide-ramp.lsp` | same ramp controller, pure newLISP via FFI |
+| `seatuya-wizard.lsp` | full tinytuya wizard clone in newLISP |
 
-    ./fetch-deps.sh        # fetches tuyapp (and jsoncpp if not installed)
-    autoreconf -fi
-    ./configure
-    make
-    make check
-    make install
+**Distribution packaging:**
 
-Dependencies are fetched on demand by fetch-deps.sh -- nothing
+Starter packaging for RPM, Debian, Arch, Alpine, Gentoo, Slackware,
+FreeBSD, OpenBSD, NetBSD, and NixOS under `dist/`.
+See `README.distributions` for details.
+
+## Building
+
+```sh
+./fetch-deps.sh        # fetches tuyapp (and jsoncpp if not installed)
+autoreconf -fi
+./configure
+make
+make check
+make install
+```
+
+Dependencies are fetched on demand by `fetch-deps.sh` -- nothing
 third-party is shipped in the repository.  System-installed libraries
 are preferred when available.
 
 If libtls is available, the libtls-based wizard is also built.
-configure will detect it automatically and print a hint with the
+`configure` will detect it automatically and print a hint with the
 install command for your distribution if it is missing.
 
+## Dependencies
 
-Dependencies
-------------
+**Required:**
 
-Required:
-  OpenSSL or LibreSSL      system crypto library
-  A C17 compiler           gcc 8+, clang 6+, MSVC 2019+
-  A C++14 compiler         for building tuyapp internals
-  GNU autotools            autoconf, automake, libtool (from git only)
+| Dependency | Notes |
+|------------|-------|
+| OpenSSL or LibreSSL | system crypto library |
+| C17 compiler | gcc 8+, clang 6+, MSVC 2019+ |
+| C++14 compiler | for building tuyapp internals |
+| GNU autotools | autoconf, automake, libtool (from git only) |
 
-Fetched automatically:
-  tuyapp                   C++ Tuya protocol library
-  jsoncpp                  JSON parser (system copy preferred)
+**Fetched automatically:**
 
-Optional:
-  libtls                   for the libtls wizard variant
-  newLISP 10.7+            for the newLISP examples and modules
+| Dependency | Notes |
+|------------|-------|
+| tuyapp | C++ Tuya protocol library |
+| jsoncpp | JSON parser (system copy preferred) |
 
+**Optional:**
 
-Using from other languages
---------------------------
+| Dependency | Notes |
+|------------|-------|
+| libtls | for the libtls wizard variant |
+| newLISP 10.7+ | for the newLISP examples and modules |
+
+## Using from other languages
 
 The whole point of seatuya is that you do not need to use C.  After
-`make install`, any language with FFI can load libseatuya.so and call
+`make install`, any language with FFI can load `libseatuya.so` and call
 its functions.  The API uses only C types: pointers to opaque structs,
 char pointers, ints, and enums.  No C++ types cross the ABI boundary.
 
 A minimal FFI session in pseudocode:
 
-    lib = load("libseatuya.so")
-    dev = lib.seatuya_create("3.4")
-    lib.seatuya_connect(dev, "192.168.1.100")
-    lib.seatuya_negotiate_session(dev, "your_local_key_here")
-    buf = allocate(1024)
-    n = lib.seatuya_build_message(dev, buf, 10, '{"devId":"...","dps":{"1":true}}', "key")
-    lib.seatuya_send(dev, buf, n)
-    n = lib.seatuya_receive(dev, buf, 1024, 0)
-    response = lib.seatuya_decode_message(dev, buf, n, "key")
-    lib.seatuya_destroy(dev)
+```
+lib = load("libseatuya.so")
+dev = lib.seatuya_create("3.4")
+lib.seatuya_connect(dev, "192.168.1.100")
+lib.seatuya_negotiate_session(dev, "your_local_key_here")
+buf = allocate(1024)
+n = lib.seatuya_build_message(dev, buf, 10, '{"devId":"...","dps":{"1":true}}', "key")
+lib.seatuya_send(dev, buf, n)
+n = lib.seatuya_receive(dev, buf, 1024, 0)
+response = lib.seatuya_decode_message(dev, buf, n, "key")
+lib.seatuya_destroy(dev)
+```
 
-See seatuya.lsp for a real-world example of this pattern in newLISP.
+See `seatuya.lsp` for a real-world example of this pattern in newLISP.
 The same approach works in Python ctypes, Lua FFI, Ruby FFI, Tcl,
 Zig, Nim, Racket, Janet, or anything else that can call C functions.
 
+## License
 
-License
--------
+BSD-2-Clause.  See `COPYING` for details.
 
-BSD-2-Clause.  See COPYING for details.
-
-tuyapp is licensed under GPL-3.0+ (see deps/tuyapp/LICENSE after fetch).
-jsoncpp is licensed under MIT (see deps/jsoncpp/LICENSE after fetch).
+tuyapp is licensed under GPL-3.0+ (see `deps/tuyapp/LICENSE` after fetch).
+jsoncpp is licensed under MIT (see `deps/jsoncpp/LICENSE` after fetch).
