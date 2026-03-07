@@ -542,6 +542,31 @@ Every constructor accepts optional DP number overrides for devices that
 use non-standard mappings.  The defaults match the most common Tuya
 device configurations, as documented by tinytuya.
 
+## Related projects
+
+The Tuya local protocol has been reverse-engineered and implemented
+by many projects across different languages.  seatuya builds directly
+on tuyapp and takes its API design from tinytuya, but the broader
+ecosystem deserves credit -- the collective work of these projects is
+what makes local Tuya control possible at all.
+
+| Project | Language | Notes |
+|---------|----------|-------|
+| [tinytuya](https://github.com/jasonacox/tinytuya) | Python | The most popular local-control library. seatuya's API, device classes, DP mappings, and device subclass hierarchy are modeled directly on tinytuya. |
+| [tuyapp](https://github.com/rnascunha/tuyapp) | C++ | Protocol implementation that seatuya wraps. Provides the encryption, framing, and session negotiation that libseatuya exposes through a C ABI. |
+| [tuya-local](https://github.com/make-all/tuya-local) | Python | Home Assistant custom integration for local control. |
+| [tuyapi](https://github.com/codetheweb/tuyapi) | Node.js | One of the earliest local-control implementations. |
+| [TuyaOpen](https://github.com/tuya/TuyaOpen) | C | Tuya's official open-source SDK for embedded development. |
+| [tuyaha](https://github.com/PaulAnnewordup/tuyaha) | Python | Cloud-only Tuya API wrapper. |
+| [localtuya](https://github.com/rospogrigio/localtuya) | Python | Another Home Assistant integration for local control. |
+| [tuya-mqtt](https://github.com/TheAgentK/tuya-mqtt) | Node.js | MQTT bridge for Tuya devices. |
+| [TuyaOS](https://developer.tuya.com/en/tuyaos) | C | Tuya's commercial embedded OS (closed source, listed for context). |
+
+seatuya's contribution is not a new protocol implementation -- tuyapp
+already did that.  It is a C ABI layer that makes the protocol
+accessible from any language with FFI, plus a device-class hierarchy
+(inspired by tinytuya) that maps named operations to raw DP numbers.
+
 ## License
 
 BSD-2-Clause.  See `COPYING` for details.
