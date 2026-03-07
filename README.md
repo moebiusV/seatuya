@@ -46,14 +46,26 @@ library once, and every language gets Tuya for free.
    same works for Lua, Tcl, Forth, Zig, Nim, Janet, Racket --
    whatever you prefer.
 
-3. **Portable across every major platform.**  Builds with standard
+3. **FFI-clean header with no preprocessor constants.**  Most C
+   libraries define command codes, protocol versions, and buffer sizes
+   as `#define` macros.  Macros disappear after preprocessing -- they
+   exist only in the C compiler's world.  An FFI caller in Lua or
+   newLISP never sees them, so the integrator has to read the header,
+   copy every numeric value by hand, and keep the copies in sync when
+   the library updates.  seatuya uses `enum` and `const` for every
+   public constant.  Enums are real symbols: they show up in debug
+   info, they have addresses, and FFI tools can extract them
+   automatically.  Nothing in `seatuya.h` requires a C preprocessor
+   to use.
+
+4. **Portable across every major platform.**  Builds with standard
    autotools on Linux (any distribution), macOS, FreeBSD, OpenBSD,
    NetBSD, and Windows.  Starter packaging for 10 distributions is
    included under `dist/`.  tinytuya only works where Python works
    well, which excludes embedded systems, minimal containers, and
    BSDs where Python packaging is a constant headache.
 
-4. **Self-contained wizard with no cloud SDK.**  tinytuya's wizard
+5. **Self-contained wizard with no cloud SDK.**  tinytuya's wizard
    requires the requests library, a working Python SSL stack, and a
    compatible cryptography package (which itself needs Rust to
    compile from source on some platforms).  seatuya-wizard does
@@ -62,7 +74,7 @@ library once, and every language gets Tuya for free.
    wizard needs is either in the binary or in libc.  No supply
    chain, no PyPI, no Rust toolchain surprise.
 
-5. **Predictable, auditable behavior.**  A C library with a manpage, a
+6. **Predictable, auditable behavior.**  A C library with a manpage, a
    clean header, and no magic.  No monkey-patching, no dynamic
    dispatch, no import-time side effects.  The entire public API
    fits in one header file.  You can read it, understand it, and
