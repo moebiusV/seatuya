@@ -177,7 +177,7 @@ seatuya_destroy(dev);
 .PP
 The same workflow can be replicated from any language with FFI.
 The newLISP bindings shipped with seatuya (seatuya.lsp) demonstrate
-this: a 200-line module wraps the entire C API, and the example
+this: a thin module wraps the entire C API, and the example
 programs (seatuya-wizard.lsp, sousvide-ramp.lsp) use it to control
 real hardware without writing any C.
 .SS newLISP convenience layer
@@ -245,7 +245,10 @@ and
 .BR SirenDevice .
 All classes support
 .B :status
-(query DPs) and
+(query DPs),
+.B :reconnect
+(re-establish a dropped connection, including session negotiation
+for protocol 3.4+), and
 .B :destroy
 (disconnect and free).
 Constructor arguments allow overriding default DP numbers

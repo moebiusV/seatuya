@@ -20,7 +20,7 @@ shelling out to Python or embedding a C++ runtime.
 
 The newLISP modules shipped in this repository are a proof of concept.
 newLISP has no Tuya support of its own and never will.  But with
-seatuya installed, a 200-line FFI wrapper (seatuya.lsp) gives it the
+seatuya installed, a thin FFI wrapper (seatuya.lsp) gives it the
 full local-control API, and a 530-line script (seatuya-wizard.lsp)
 replicates the entire tinytuya wizard -- cloud authentication, device
 enumeration, UDP scanning, config generation -- in a language the Tuya
@@ -251,7 +251,7 @@ interaction is the same handful of calls.
 
 The same approach works in Python ctypes, Lua FFI, Ruby FFI, Tcl,
 Zig, Nim, Racket, Janet, or anything else that can call C functions.
-`seatuya.lsp` is 200 lines.  A wrapper in your language of choice
+`seatuya.lsp` is under 300 lines.  A wrapper in your language of choice
 would be about the same.
 
 ### Convenience functions
@@ -293,8 +293,9 @@ write `(:turn-on plug)` instead of raw `set-value` calls.
 | `LockDevice` | smart locks | `:lock`, `:unlock` |
 | `SirenDevice` | sirens, alarms | `:set-volume`, `:set-duration` |
 
-All classes also support `:status` (query all DPs) and `:destroy`
-(disconnect and free the handle).
+All classes also support `:status` (query all DPs), `:reconnect`
+(re-establish a dropped connection, including session negotiation
+for protocol 3.4+), and `:destroy` (disconnect and free the handle).
 
 ### Example: smart plug
 
