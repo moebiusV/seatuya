@@ -31,6 +31,53 @@ developers have never heard of.  That is the point: write the C
 library once, and every language gets Tuya for free.
 
 
+Advantages over tinytuya and tuyapp
+------------------------------------
+
+1. No runtime dependencies.  seatuya-wizard is a statically-linked
+   binary.  Copy it to a machine and run it.  No Python, no pip, no
+   venv, no requirements.txt, no resolving version conflicts between
+   cryptography, pyOpenSSL, requests, and urllib3.  It works on a bare
+   Debian container, a FreeBSD jail, or a Raspberry Pi with nothing
+   installed.  tinytuya pulls in 15+ transitive Python packages and
+   breaks when any of them ships an incompatible update.
+
+2. Any language gets Tuya for free.  tuyapp locks you into C++,
+   tinytuya locks you into Python.  seatuya exposes opaque handles,
+   C strings, and ints across the ABI boundary.  If your language can
+   call dlopen, it can control Tuya devices.  The newLISP modules
+   prove this: 200 lines of FFI wrapping, and a language with zero
+   IoT ecosystem gets full local control and a cloud wizard.  The
+   same works for Lua, Tcl, Forth, Zig, Nim, Janet, Racket --
+   whatever you prefer.
+
+3. Portable across every major platform.  Builds with standard
+   autotools on Linux (any distribution), macOS, FreeBSD, OpenBSD,
+   NetBSD, and Windows.  Starter packaging for 10 distributions is
+   included under dist/.  tinytuya only works where Python works
+   well, which excludes embedded systems, minimal containers, and
+   BSDs where Python packaging is a constant headache.
+
+4. Self-contained wizard with no cloud SDK.  tinytuya's wizard
+   requires the requests library, a working Python SSL stack, and a
+   compatible cryptography package (which itself needs Rust to
+   compile from source on some platforms).  seatuya-wizard does
+   HTTPS with libtls or raw OpenSSL BIOs, HMAC-SHA256 with
+   libcrypto, and JSON with a small built-in parser.  Everything the
+   wizard needs is either in the binary or in libc.  No supply
+   chain, no PyPI, no Rust toolchain surprise.
+
+5. Predictable, auditable behavior.  A C library with a manpage, a
+   clean header, and no magic.  No monkey-patching, no dynamic
+   dispatch, no import-time side effects.  The entire public API
+   fits in one header file.  You can read it, understand it, and
+   trust it on a system where reliability matters -- a production
+   IoT gateway, a brewery controller, an HVAC system.  When
+   tinytuya updates and changes its internal retry logic or cloud
+   API parsing, you get the new behavior whether you wanted it or
+   not.  seatuya's ABI does not change out from under you.
+
+
 What is included
 ----------------
 
