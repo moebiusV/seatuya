@@ -396,9 +396,10 @@ seatuya -- just change the syntax.
 
 | tinytuya (Python) | seatuya (C) | seatuya (newLISP) |
 |--------------------|-------------|---------------------|
-| `d.id` | `tuya_get_device_id(d)` | `(tuya:get-device-id d:handle)` |
-| `d.local_key` | `tuya_get_local_key(d)` | `(tuya:get-local-key d:handle)` |
-| `d.address` | `tuya_get_ip(d)` | `(tuya:get-ip d:handle)` |
+| `d.id` | `tuya_get_device_id(d)` | `d:id` |
+| `d.local_key` | `tuya_get_local_key(d)` | `d:local-key` |
+| `d.address` | `tuya_get_ip(d)` | `d:ip` |
+| `d.version` | *(n/a)* | `d:version` |
 | *(n/a)* | `tuya_get_protocol(d)` | `(tuya:get-protocol d:handle)` |
 | *(n/a)* | `tuya_get_session_state(d)` | `(tuya:get-session-state d:handle)` |
 | *(n/a)* | `tuya_get_socket_state(d)` | `(tuya:get-socket-state d:handle)` |
