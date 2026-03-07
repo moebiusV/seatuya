@@ -41,7 +41,7 @@ library once, and every language gets Tuya for free.
    tinytuya locks you into Python.  seatuya exposes opaque handles,
    C strings, and ints across the ABI boundary.  If your language can
    call `dlopen`, it can control Tuya devices.  The newLISP modules
-   prove this: 200 lines of FFI wrapping, and a language with zero
+   prove this: under 300 lines of FFI wrapping, and a language with zero
    IoT ecosystem gets full local control and a cloud wizard.  The
    same works for Lua, Tcl, Forth, Zig, Nim, Janet, Racket --
    whatever you prefer.
@@ -278,20 +278,71 @@ functions are the building blocks for the FOOP device classes below.
 
 `tuya-devices.lsp` provides high-level device classes using newLISP's FOOP
 (Functional Object-Oriented Programming) system.  Each class maps
-tinytuya's convenience methods to the correct data point numbers, so you
-write `(:turn-on plug)` instead of raw `set-value` calls.
+convenience methods to the correct data point (DP) numbers for a device
+category, so you write `(:turn-on plug)` instead of raw `set-value` calls.
+
+### Relationship to tinytuya
+
+tinytuya (Python) has three built-in device classes -- `OutletDevice`,
+`BulbDevice`, and `CoverDevice` -- plus a base `Device` class with
+`set_value()`, `set_status()`, and `status()`.  Additional device types
+(`ThermostatDevice`, `IRRemoteControlDevice`, `DoorbellDevice`,
+`ClimateDevice`, and others) live in tinytuya's community-contributed
+`Contrib` module.
+
+seatuya mirrors this in two layers:
+
+- **`seatuya.lsp`** corresponds to tinytuya's base `Device` class.
+  `tuya:set-value` and `tuya:status` are the equivalents of
+  `device.set_value()` and `device.status()`.
+
+- **`tuya-devices.lsp`** corresponds to tinytuya's device subclasses.
+  `OutletDevice`, `BulbDevice`, and `CoverDevice` follow the same DP
+  mappings as tinytuya's core classes.  `ThermostatDevice` follows
+  tinytuya's Contrib thermostat.
+
+`FanDevice`, `LockDevice`, and `SirenDevice` do not have tinytuya
+counterparts.  They are based on common Tuya DP conventions documented
+in the Tuya developer portal and tested against real devices, but they
+are not translations of existing tinytuya code.
+
+Device types that tinytuya's Contrib module provides but seatuya does
+not yet cover include: `IRRemoteControlDevice`, `DoorbellDevice`,
+`ClimateDevice` (portable AC units), `SocketDevice` (energy-monitoring
+sockets), `InverterHeatPumpDevice`, and `PresenceDetectorDevice`.
+There is also no generic `SensorDevice` for read-only devices like
+humidity sensors or air quality monitors -- these currently work
+through `:status` on any device class, but lack named getters.
+
+### Architectural difference
+
+tinytuya bundles connection management, credentials, message framing,
+and device semantics into a single `Device` object.  seatuya splits
+these across three layers:
+
+1. **`libseatuya` (C)** -- transport, encryption, framing.  No device
+   semantics, no credentials stored.
+2. **`seatuya.lsp` (FFI wrapper)** -- buffer management, one-call
+   round-trips (`tuya:set-value`), credential storage.  Equivalent to
+   tinytuya's base `Device`.
+3. **`tuya-devices.lsp` (FOOP classes)** -- DP mappings and named
+   methods.  Equivalent to tinytuya's device subclasses.
+
+The FOOP objects are plain lists.  You can always reach through to the
+raw handle with `(my-device 1)` and call `tuya:` functions directly --
+the abstraction is a convenience, not a cage.
 
 ### Supported device types
 
-| Class | Devices | Key methods |
-|-------|---------|-------------|
-| `OutletDevice` | smart plugs, power strips, wall switches | `:turn-on`, `:turn-off`, `:set-dimmer` |
-| `BulbDevice` | RGB/RGBW smart bulbs (type A and B) | `:set-colour`, `:set-brightness-pct`, `:set-colourtemp-pct`, `:set-white` |
-| `CoverDevice` | blinds, curtains, garage doors (8 command variants) | `:open-cover`, `:close-cover`, `:stop-cover`, `:set-position` |
-| `ThermostatDevice` | thermostats, HVAC controllers | `:set-temperature`, `:set-mode`, `:get-temperature` |
-| `FanDevice` | fans, air purifiers | `:set-speed`, `:set-oscillation` |
-| `LockDevice` | smart locks | `:lock`, `:unlock` |
-| `SirenDevice` | sirens, alarms | `:set-volume`, `:set-duration` |
+| Class | tinytuya equivalent | Key methods |
+|-------|---------------------|-------------|
+| `OutletDevice` | `OutletDevice` (core) | `:turn-on`, `:turn-off`, `:set-dimmer` |
+| `BulbDevice` | `BulbDevice` (core) | `:set-colour`, `:set-brightness-pct`, `:set-colourtemp-pct`, `:set-white` |
+| `CoverDevice` | `CoverDevice` (core) | `:open-cover`, `:close-cover`, `:stop-cover`, `:set-position` |
+| `ThermostatDevice` | `ThermostatDevice` (contrib) | `:set-temperature`, `:set-mode`, `:get-temperature` |
+| `FanDevice` | -- | `:set-speed`, `:set-oscillation` |
+| `LockDevice` | -- | `:lock`, `:unlock` |
+| `SirenDevice` | -- | `:set-volume`, `:set-duration` |
 
 All classes also support `:status` (query all DPs), `:reconnect`
 (re-establish a dropped connection, including session negotiation

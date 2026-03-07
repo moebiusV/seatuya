@@ -184,13 +184,19 @@ real hardware without writing any C.
 .B seatuya.lsp
 also provides high-level functions that collapse the five-step
 send/receive round-trip into a single call.
-Store credentials once with
-.BR tuya:set-credentials ,
-then use
+These correspond to tinytuya's base
+.B Device
+class methods:
 .BR tuya:set-value
+is the equivalent of Python's
+.BR device.set_value() ,
 and
 .BR tuya:status
-without passing device-id and local-key on every call:
+is the equivalent of
+.BR device.status() .
+Store credentials once with
+.BR tuya:set-credentials ,
+then call these without passing device-id and local-key each time:
 .PP
 .RS
 .nf
@@ -206,8 +212,7 @@ without passing device-id and local-key on every call:
 .SS newLISP FOOP device classes
 .B tuya-devices.lsp
 provides device-class convenience functions using newLISP FOOP
-(Functional Object-Oriented Programming), mirroring the device
-classes in tinytuya.
+(Functional Object-Oriented Programming).
 Each class maps named methods to the correct data point numbers
 for that device category:
 .PP
@@ -229,20 +234,20 @@ for that device category:
 .fi
 .RE
 .PP
-Available classes:
-.BR OutletDevice
-(smart plugs, power strips),
-.BR BulbDevice
-(RGB/RGBW bulbs, type A and B DP layouts),
+.BR OutletDevice ,
+.BR BulbDevice ,
+and
 .BR CoverDevice
-(blinds, curtains, garage doors -- 8 command variants),
+follow the same DP mappings as tinytuya's core device classes.
 .BR ThermostatDevice
-(thermostats, HVAC -- configurable DP map),
-.BR FanDevice
-(fans, air purifiers),
+follows tinytuya's community-contributed thermostat.
+.BR FanDevice ,
 .BR LockDevice ,
 and
-.BR SirenDevice .
+.BR SirenDevice
+are based on common Tuya DP conventions but do not have
+tinytuya counterparts.
+.PP
 All classes support
 .B :status
 (query DPs),
@@ -253,6 +258,20 @@ for protocol 3.4+), and
 (disconnect and free).
 Constructor arguments allow overriding default DP numbers
 for devices with non-standard mappings.
+.PP
+Unlike tinytuya, where the
+.B Device
+object owns the socket, credentials, and framing logic,
+seatuya splits these across three layers: the C library
+(transport and encryption),
+.B seatuya.lsp
+(buffer management and one-call round-trips), and
+.B tuya-devices.lsp
+(DP mappings and named methods).
+The FOOP objects are plain lists; callers can always access
+the raw handle directly and call
+.B tuya:
+functions when needed.
 .SH CONSTANTS
 .TP
 .B SEATUYA_DEFAULT_PORT
