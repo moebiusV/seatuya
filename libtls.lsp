@@ -1,7 +1,7 @@
 ; libtls.lsp — newLISP module wrapping libtls (LibreSSL/libretls).
 ;
 ; Provides HTTPS client functionality via the libtls API.
-; Loads crypto-fast.lsp for all cryptographic operations (hashing,
+; Loads crypto.lsp for all cryptographic operations (hashing,
 ; HMAC, PBKDF2, CSPRNG, hex encoding).
 ;
 ; Usage:
@@ -15,11 +15,11 @@
 ;
 
 ;; ----------------------------------------------------------------
-;;  Load crypto-fast.lsp (complete libcrypto wrapper)
+;;  Load crypto.lsp (complete libcrypto wrapper)
 ;; ----------------------------------------------------------------
 
 (let (dir (or (env "SEATUYA_LSP_DIR") (real-path ".")))
-  (load (string dir "/crypto-fast.lsp")))
+  (load (string dir "/crypto.lsp")))
 
 ;; ----------------------------------------------------------------
 ;;  libtls FFI (context: tls)

@@ -1,4 +1,4 @@
-; crypto-fast.lsp — Complete newLISP wrapper for OpenSSL/LibreSSL libcrypto.
+; crypto.lsp — Complete newLISP wrapper for OpenSSL/LibreSSL libcrypto.
 ;
 ; Drop-in replacement for the built-in crypto.lsp with these improvements:
 ;   - All hash functions write into caller-owned buffers (no static internals)
@@ -13,9 +13,9 @@
 ; (md5, sha1, sha256, ripemd160, hmac) keep the same signatures.
 ;
 ; Usage:
-;   (load "crypto-fast.lsp")
+;   (load "crypto.lsp")
 ;   ; or to replace the built-in:
-;   (module "crypto-fast.lsp")
+;   (module "crypto.lsp")
 ;
 ;   (crypto:sha256 "ABC")
 ;     => "b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78"

@@ -161,17 +161,17 @@
 ;;  Inkbird convenience wrappers
 ;; ----------------------------------------------------------------
 
-(define (power-on sv)
+(define (power-on)
   (println "  powering on")
-  (:turn-on sv))
+  (sv:turn-on))
 
-(define (set-temperature-f sv temp-f)
+(define (set-temperature-f temp-f)
   (println (format "  set target: %.1f F (%.1f C)" temp-f (f-to-c temp-f)))
-  (:set-temperature sv (f-to-c temp-f)))
+  (sv:set-temperature (f-to-c temp-f)))
 
-(define (query-status sv)
+(define (query-status)
   (println "  querying status")
-  (let (resp (:status sv))
+  (let (resp (sv:status))
     (when resp (println "  response: " resp))))
 
 ;; ----------------------------------------------------------------
@@ -270,29 +270,31 @@
 
         ;; Create ThermostatDevice with Inkbird DP mapping:
         ;;   dp-switch=101, dp-target=103, dp-current=104, dp-mode=102, temp-scale=10
-        (let (sv (ThermostatDevice version ip device-id local-key
-                   DPS_POWER DPS_TARGET_TEMP DPS_CURRENT_TEMP DPS_STATUS 10))
+        (new ThermostatDevice 'sv)
+        (sv version ip device-id local-key
+            DPS_POWER DPS_TARGET_TEMP DPS_CURRENT_TEMP DPS_STATUS 10)
 
-          ;; Query current status, power on, set initial temperature
-          (query-status sv)
-          (power-on sv)
-          (set-temperature-f sv start-f)
+        ;; Query current status, power on, set initial temperature
+        (query-status)
+        (power-on)
+        (set-temperature-f start-f)
 
-          ;; Ramp loop: one adjustment per minute
-          (for (i 1 steps)
-            (let (temp (min end-f (add start-f (mul step-f i))))
-              (print (format "[%3d/%d min] " i steps))
-              (sleep 60000)
+        ;; Ramp loop: one adjustment per minute
+        (for (i 1 steps)
+          (let (temp (min end-f (add start-f (mul step-f i))))
+            (print (format "[%3d/%d min] " i steps))
+            (sleep 60000)
 
-              ;; Reconnect if connection dropped
-              (:reconnect sv)
+            ;; Reconnect if connection dropped
+            (sv:reconnect)
 
-              (set-temperature-f sv temp)))
+            (set-temperature-f temp)))
 
-          (println (format "\nramp complete -- holding at %.1f F" end-f))
+        (println (format "\nramp complete -- holding at %.1f F" end-f))
 
-          ;; Clean up
-          (:destroy sv))))))
+        ;; Clean up
+        (sv:destroy)
+        (delete 'sv))))))
 
 (main)
 (exit)

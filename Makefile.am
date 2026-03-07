@@ -7,7 +7,7 @@ EXTRA_DIST = README COPYING AUTHORS NEWS ChangeLog INSTALL fetch-deps.sh \
 	tuya-devices.lsp \
 	find-lib.lsp \
 	libtls.lsp \
-	crypto-fast.lsp \
+	crypto.lsp \
 	dist/rpm/seatuya.spec \
 	dist/debian/control \
 	dist/debian/rules \

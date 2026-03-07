@@ -106,10 +106,10 @@ different niche: a C ABI that any language can call.
 | File | Description |
 |------|-------------|
 | `find-lib.lsp` | cross-platform shared-library discovery |
-| `crypto-fast.lsp` | complete libcrypto FFI wrapper (replaces the built-in crypto.lsp with native calls, caller-owned buffers, SHA3, HMAC, PBKDF2, CSPRNG) |
+| `crypto.lsp` | complete libcrypto FFI wrapper (native calls, caller-owned buffers, SHA3, HMAC, PBKDF2, CSPRNG) |
 | `libtls.lsp` | libtls FFI wrapper for HTTPS |
 | `seatuya.lsp` | newLISP bindings for libseatuya |
-| `tuya-devices.lsp` | FOOP device classes (OutletDevice, BulbDevice, CoverDevice, ThermostatDevice, SocketDevice, ClimateDevice, DoorbellDevice, IRRemoteControlDevice, InverterHeatPumpDevice, PresenceDetectorDevice) |
+| `tuya-devices.lsp` | device classes (OutletDevice, BulbDevice, CoverDevice, ThermostatDevice, SocketDevice, ClimateDevice, DoorbellDevice, IRRemoteControlDevice, InverterHeatPumpDevice, PresenceDetectorDevice) |
 
 **Example programs (C):**
 
@@ -306,7 +306,7 @@ device, but for a general-purpose library it helps to have one more
 layer: named methods that map human-readable operations to the right
 DP for each device category.
 
-In newLISP, the FOOP device classes provide this.  Each class knows
+In newLISP, the device classes provide this.  Each class knows
 its own DP layout and exposes named methods:
 
 ```newlisp
@@ -317,24 +317,24 @@ its own DP layout and exposes named methods:
 (tuya:set-value dev 24 "00dc004603e8")
 
 ; Named methods -- the class knows the DP numbers:
-(:turn-on bulb)
-(:set-brightness bulb 500)
-(:set-colour bulb 255 0 0)       ; RGB, converted to HSV hex internally
+(my-bulb:turn-on)
+(my-bulb:set-brightness 500)
+(my-bulb:set-colour 255 0 0)    ; RGB, converted to HSV hex internally
 ```
 
 The progression is: raw protocol (5 steps) -> high-level C function
-(1 step, DP number) -> named FOOP method (1 step, no DP number).
+(1 step, DP number) -> named device method (1 step, no DP number).
 Each layer hides exactly one kind of detail: the C library hides
 buffer management and encryption, the high-level functions hide the
-round-trip ceremony, and the FOOP classes hide device-specific DP
+round-trip ceremony, and the device classes hide device-specific DP
 mappings.
 
-## Device classes (newLISP FOOP)
+## Device classes (newLISP)
 
-`tuya-devices.lsp` provides high-level device classes using newLISP's FOOP
-(Functional Object-Oriented Programming) system.  Each class maps
-convenience methods to the correct data point (DP) numbers for a device
-category, so you write `(:turn-on plug)` instead of raw `set-value` calls.
+`tuya-devices.lsp` provides high-level device classes using newLISP's
+context-based OOP (`new`/`delete`).  Each class maps convenience methods
+to the correct data point (DP) numbers for a device category, so you
+write `my-plug:turn-on` instead of raw `set-value` calls.
 
 ### Relationship to tinytuya
 
@@ -357,8 +357,8 @@ seatuya mirrors this in two layers:
   their counterparts in tinytuya's community-contributed `Contrib` module.
 
 Read-only devices like humidity sensors or air quality monitors work
-through `:status` on any device class but lack named getters.  There is
-no generic `SensorDevice` yet.
+through `my-dev:status` on any device class but lack named getters.
+There is no generic `SensorDevice` yet.
 
 ### API mapping
 
@@ -434,57 +434,62 @@ these across two layers:
    storage, and high-level round-trip operations (`tuya_set_value_*`,
    `tuya_status`, `tuya_turn_on`, etc.).  Equivalent to
    tinytuya's base `Device`.
-2. **`tuya-devices.lsp` (FOOP classes)** -- DP mappings and named
+2. **`tuya-devices.lsp` (device classes)** -- DP mappings and named
    methods.  Equivalent to tinytuya's device subclasses.
 
 `seatuya.lsp` is a thin FFI wrapper that imports the C functions into
 newLISP.  It adds no logic of its own beyond type dispatch in
 `tuya:set-value`.
 
-The FOOP objects are plain lists.  You can always reach through to the
-raw handle with `(my-device 1)` and call `tuya:` functions directly --
-the abstraction is a convenience, not a cage.
+Each device instance is a newLISP context cloned via `new`.  You can
+always reach through to the raw handle with `my-device:handle` and call
+`tuya:` functions directly -- the abstraction is a convenience, not a
+cage.
 
 ### Supported device types
 
 | Class | tinytuya equivalent | Key methods |
 |-------|---------------------|-------------|
-| `OutletDevice` | `OutletDevice` (core) | `:turn-on`, `:turn-off`, `:set-dimmer` |
-| `BulbDevice` | `BulbDevice` (core) | `:set-colour`, `:set-brightness-pct`, `:set-colourtemp-pct`, `:set-white` |
-| `CoverDevice` | `CoverDevice` (core) | `:open-cover`, `:close-cover`, `:stop-cover`, `:set-position` |
-| `ThermostatDevice` | `ThermostatDevice` (contrib) | `:set-temperature`, `:set-mode`, `:get-temperature` |
-| `SocketDevice` | `SocketDevice` (contrib) | `:turn-on`, `:turn-off`, `:get-energy` |
-| `ClimateDevice` | `ClimateDevice` (contrib) | `:set-temperature`, `:set-mode`, `:set-fan-speed` |
-| `DoorbellDevice` | `DoorbellDevice` (contrib) | `:set-volume`, `:set-motion-switch`, `:set-motion-sensitivity` |
-| `IRRemoteControlDevice` | `IRRemoteControlDevice` (contrib) | `:study-start`, `:study-end`, `:send-button`, `:send-key` |
-| `InverterHeatPumpDevice` | `InverterHeatPumpDevice` (contrib) | `:set-target-temp`, `:set-silence-mode`, `:get-inlet-temp` |
-| `PresenceDetectorDevice` | `PresenceDetectorDevice` (contrib) | `:set-sensitivity`, `:set-near-detection`, `:set-far-detection` |
+| `OutletDevice` | `OutletDevice` (core) | `turn-on`, `turn-off`, `set-dimmer` |
+| `BulbDevice` | `BulbDevice` (core) | `set-colour`, `set-brightness-pct`, `set-colourtemp-pct`, `set-white` |
+| `CoverDevice` | `CoverDevice` (core) | `open-cover`, `close-cover`, `stop-cover`, `set-position` |
+| `ThermostatDevice` | `ThermostatDevice` (contrib) | `set-temperature`, `set-mode`, `get-temperature` |
+| `SocketDevice` | `SocketDevice` (contrib) | `turn-on`, `turn-off`, `get-energy` |
+| `ClimateDevice` | `ClimateDevice` (contrib) | `set-temperature`, `set-mode`, `set-fan-speed` |
+| `DoorbellDevice` | `DoorbellDevice` (contrib) | `set-volume`, `set-motion-switch`, `set-motion-sensitivity` |
+| `IRRemoteControlDevice` | `IRRemoteControlDevice` (contrib) | `study-start`, `study-end`, `send-button`, `send-key` |
+| `InverterHeatPumpDevice` | `InverterHeatPumpDevice` (contrib) | `set-target-temp`, `set-silence-mode`, `get-inlet-temp` |
+| `PresenceDetectorDevice` | `PresenceDetectorDevice` (contrib) | `set-sensitivity`, `set-near-detection`, `set-far-detection` |
 
-All classes also support `:status` (query all DPs), `:reconnect`
+All classes also support `status` (query all DPs), `reconnect`
 (re-establish a dropped connection, including session negotiation
-for protocol 3.4+), and `:destroy` (disconnect and free the handle).
+for protocol 3.4+), and `destroy` (disconnect and free the handle).
 
 ### Example: smart plug
 
 ```newlisp
 (load "tuya-devices.lsp")
 
-(setq plug (OutletDevice "3.3" "192.168.1.50" "device-id" "local-key"))
-(:turn-on plug)
-(:status plug)
-(:turn-off plug)
-(:destroy plug)
+(new OutletDevice 'my-plug)
+(my-plug "3.3" "192.168.1.50" "device-id" "local-key")
+(my-plug:turn-on)
+(my-plug:status)
+(my-plug:turn-off)
+(my-plug:destroy)
+(delete 'my-plug)
 ```
 
 ### Example: RGB bulb
 
 ```newlisp
-(setq bulb (BulbDevice "3.4" "192.168.1.51" "device-id" "local-key"))
-(:turn-on bulb)
-(:set-colour bulb 255 0 0)      ; red
-(:set-brightness-pct bulb 50)   ; half brightness
-(:set-white bulb 500 500)       ; white mode, mid brightness + temp
-(:destroy bulb)
+(new BulbDevice 'my-bulb)
+(my-bulb "3.4" "192.168.1.51" "device-id" "local-key")
+(my-bulb:turn-on)
+(my-bulb:set-colour 255 0 0)    ; red
+(my-bulb:set-brightness-pct 50) ; half brightness
+(my-bulb:set-white 500 500)     ; white mode, mid brightness + temp
+(my-bulb:destroy)
+(delete 'my-bulb)
 ```
 
 ### Example: thermostat with custom DP map
@@ -492,11 +497,13 @@ for protocol 3.4+), and `:destroy` (disconnect and free the handle).
 ```newlisp
 ;; Default DPs: 1=switch, 2=target, 3=current, 4=mode, scale=10
 ;; Override for a device that uses different DP numbers:
-(setq therm (ThermostatDevice "3.3" "192.168.1.52" "dev-id" "key"
-              2 16 24 4 1))     ; switch=2, target=16, current=24, mode=4, scale=1
-(:set-temperature therm 72)
-(:get-temperature therm)        ; reads current temp from device
-(:destroy therm)
+(new ThermostatDevice 'my-therm)
+(my-therm "3.3" "192.168.1.52" "dev-id" "key"
+           2 16 24 4 1)         ; switch=2, target=16, current=24, mode=4, scale=1
+(my-therm:set-temperature 72)
+(my-therm:get-temperature)      ; reads current temp from device
+(my-therm:destroy)
+(delete 'my-therm)
 ```
 
 ### Example: Inkbird sous vide (custom DP map)
@@ -505,18 +512,20 @@ The `sousvide-ramp.lsp` example uses `ThermostatDevice` with Inkbird's
 non-standard DP numbers (101-110 instead of the usual 1-4):
 
 ```newlisp
-(setq sv (ThermostatDevice version ip device-id local-key
-           101 103 104 102 10))   ; power=101, target=103, current=104, status=102, scale=10
-(power-on sv)                     ; wrapper around (:turn-on sv)
-(set-temperature-f sv 145.0)      ; wrapper: F->C conversion, then (:set-temperature sv celsius)
-(query-status sv)                 ; wrapper around (:status sv)
-(:destroy sv)
+(new ThermostatDevice 'sv)
+(sv version ip device-id local-key
+    101 103 104 102 10)           ; power=101, target=103, current=104, status=102, scale=10
+(power-on)                        ; wrapper around (sv:turn-on)
+(set-temperature-f 145.0)         ; wrapper: F->C conversion, then (sv:set-temperature celsius)
+(query-status)                    ; wrapper around (sv:status)
+(sv:destroy)
+(delete 'sv)
 ```
 
 The named wrappers (`power-on`, `set-temperature-f`, `query-status`)
-are application-level functions that call the FOOP methods, which call
+are application-level functions that call the device methods, which call
 `tuya:set-value`, which calls the raw FFI.  Each layer hides the right
-details: the FOOP class hides DP numbers, the convenience functions
+details: the device class hides DP numbers, the convenience functions
 hide temperature conversion, the FFI wrapper hides buffers.
 
 ### DP number customization

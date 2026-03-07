@@ -333,10 +333,11 @@ and
 (tuya:destroy dev)
 .fi
 .RE
-.SS newLISP FOOP device classes
+.SS newLISP device classes
 .B tuya-devices.lsp
-provides device-class convenience functions using newLISP FOOP
-(Functional Object-Oriented Programming).
+provides device-class convenience functions using newLISP's
+context-based OOP
+.RB ( new / delete ).
 Each class maps named methods to the correct data point numbers
 for that device category:
 .PP
@@ -345,16 +346,20 @@ for that device category:
 (load "tuya-devices.lsp")
 
 ; Smart plug
-(setq plug (OutletDevice "3.3" "192.168.1.50" dev-id key))
-(:turn-on plug)
-(:turn-off plug)
-(:destroy plug)
+(new OutletDevice 'my-plug)
+(my-plug "3.3" "192.168.1.50" dev-id key)
+(my-plug:turn-on)
+(my-plug:turn-off)
+(my-plug:destroy)
+(delete 'my-plug)
 
 ; RGB bulb (type B)
-(setq bulb (BulbDevice "3.4" "192.168.1.51" dev-id key))
-(:set-colour bulb 255 0 0)
-(:set-brightness-pct bulb 50)
-(:destroy bulb)
+(new BulbDevice 'my-bulb)
+(my-bulb "3.4" "192.168.1.51" dev-id key)
+(my-bulb:set-colour 255 0 0)
+(my-bulb:set-brightness-pct 50)
+(my-bulb:destroy)
+(delete 'my-bulb)
 .fi
 .RE
 .PP
@@ -376,18 +381,19 @@ follow their counterparts in tinytuya's community-contributed
 module.
 .PP
 All classes support
-.B :status
+.B status
 (query DPs),
-.B :reconnect
+.B reconnect
 (re-establish a dropped connection, including session negotiation
 for protocol 3.4+), and
-.B :destroy
+.B destroy
 (disconnect and free).
 Constructor arguments allow overriding default DP numbers
 for devices with non-standard mappings.
 .PP
-The device handle stores credentials and IP internally.  The
-FOOP objects also carry these fields for convenience, but the
+Each device instance is a newLISP context cloned via
+.BR new .
+The device handle stores credentials and IP internally; the
 C library is the source of truth for connection state and
 round-trip operations.
 .SH CONSTANTS
