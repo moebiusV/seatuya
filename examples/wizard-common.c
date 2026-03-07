@@ -709,7 +709,7 @@ wizard_main(int argc, char *argv[])
 		}
 	}
 
-	printf("seatuya setup wizard [%s]\n\n", seatuya_version());
+	printf("seatuya setup wizard [%s]\n\n", tuya_version());
 
 	/* Load saved credentials */
 	load_config(config_file, &cloud);

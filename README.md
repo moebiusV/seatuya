@@ -194,28 +194,23 @@ like in practice.  Once loaded, controlling a device reads like this:
 (load "seatuya.lsp")
 
 (setq dev (tuya:create "3.4"))
+(tuya:set-credentials dev device-id local-key)
 (tuya:connect dev "192.168.1.100")
 (tuya:negotiate-session dev local-key)
 
 ; turn on switch (data point 1)
-(setq payload (tuya:generate-payload dev tuya:CMD_CONTROL device-id "{\"1\":true}"))
-(setq msg     (tuya:build-message dev tuya:CMD_CONTROL payload local-key))
-(tuya:send dev msg)
+(println (tuya:turn-on dev 1))
 
-; read response
-(setq raw (tuya:receive dev))
-(println (tuya:decode-message dev raw local-key))
+; query all data points
+(println (tuya:status dev))
 
 (tuya:destroy dev)
 ```
 
 No buffer management, no byte counting, no pointer arithmetic.
-The wrapper handles all of that.  `build-message` allocates and
-returns the right number of bytes; `receive` returns a sized buffer
-or nil; `decode-message` copies the C string and frees the original.
-The constants (`CMD_CONTROL`, `CMD_DP_QUERY`, etc.) are real values
-extracted from the C header, not `#define` macros that had to be
-copied by hand.
+The high-level functions (`turn-on`, `turn-off`, `set-value`,
+`status`, `heartbeat`) each perform a complete round-trip internally
+and return the decoded JSON response.
 
 For comparison, the same thing in C:
 
@@ -223,51 +218,50 @@ For comparison, the same thing in C:
 #include <seatuya/seatuya.h>
 #include <stdio.h>
 
-seatuya_device_t *dev = seatuya_create("3.4");
-seatuya_connect(dev, "192.168.1.100");
-seatuya_negotiate_session(dev, local_key);
+tuya_device_t *dev = tuya_create("3.4");
+tuya_set_credentials(dev, device_id, local_key);
+tuya_connect(dev, "192.168.1.100");
+tuya_negotiate_session(dev, local_key);
 
 /* turn on switch (data point 1) */
-char *payload = seatuya_generate_payload(dev,
-    SEATUYA_CMD_CONTROL, device_id, "{\"1\":true}");
-unsigned char buf[SEATUYA_RECOMMENDED_BUFSIZE];
-int n = seatuya_build_message(dev, buf,
-    SEATUYA_CMD_CONTROL, payload, local_key);
-seatuya_free_string(payload);
-seatuya_send(dev, buf, n);
+char *resp = tuya_turn_on(dev, 1);
+printf("%s\n", resp);
+tuya_free_string(resp);
 
-/* read response */
-n = seatuya_receive(dev, buf, sizeof buf, 0);
-char *response = seatuya_decode_message(dev, buf, n, local_key);
-printf("%s\n", response);
-seatuya_free_string(response);
+/* query all data points */
+resp = tuya_status(dev);
+printf("%s\n", resp);
+tuya_free_string(resp);
 
-seatuya_destroy(dev);
+tuya_destroy(dev);
 ```
 
-The C version manages its own buffers and frees returned strings.
-The newLISP wrapper hides all of that.  Either way, the device
-interaction is the same handful of calls.
+The high-level C functions handle the entire round-trip internally.
+The low-level API (`generate_payload`, `build_message`, `send`,
+`receive`, `decode_message`) is still available for advanced use
+cases like pipelining or custom command types.
 
 The same approach works in Python ctypes, Lua FFI, Ruby FFI, Tcl,
 Zig, Nim, Racket, Janet, or anything else that can call C functions.
-`seatuya.lsp` is under 300 lines.  A wrapper in your language of choice
+`seatuya.lsp` is under 250 lines.  A wrapper in your language of choice
 would be about the same.
 
 ### Convenience functions
 
 The five-step round-trip (generate payload, build message, send,
-receive, decode) can be collapsed into one call.  Store credentials
-once with `tuya:set-credentials`, then use `tuya:set-value` and
-`tuya:status`:
+receive, decode) is handled by the C library itself.  Store
+credentials once with `tuya:set-credentials`, then use
+`tuya:set-value`, `tuya:turn-on`, `tuya:turn-off`, `tuya:status`,
+and `tuya:heartbeat`:
 
 ```newlisp
 (tuya:set-credentials dev device-id local-key)
 
-(tuya:set-value dev 1 true)       ; turn on DP 1
+(tuya:turn-on dev 1)              ; turn on DP 1
 (tuya:set-value dev 3 "colour")   ; set DP 3 to a string
 (tuya:set-value dev 103 720)      ; set DP 103 to integer 720
 (tuya:status dev)                  ; query all DPs
+(tuya:reconnect dev)               ; re-establish dropped connection
 ```
 
 Values are automatically formatted as the correct JSON type (boolean,
@@ -309,15 +303,18 @@ no generic `SensorDevice` yet.
 
 tinytuya bundles connection management, credentials, message framing,
 and device semantics into a single `Device` object.  seatuya splits
-these across three layers:
+these across two layers:
 
-1. **`libseatuya` (C)** -- transport, encryption, framing.  No device
-   semantics, no credentials stored.
-2. **`seatuya.lsp` (FFI wrapper)** -- buffer management, one-call
-   round-trips (`tuya:set-value`), credential storage.  Equivalent to
+1. **`libseatuya` (C)** -- transport, encryption, framing, credential
+   storage, and high-level round-trip operations (`tuya_set_value_*`,
+   `tuya_status`, `tuya_turn_on`, etc.).  Equivalent to
    tinytuya's base `Device`.
-3. **`tuya-devices.lsp` (FOOP classes)** -- DP mappings and named
+2. **`tuya-devices.lsp` (FOOP classes)** -- DP mappings and named
    methods.  Equivalent to tinytuya's device subclasses.
+
+`seatuya.lsp` is a thin FFI wrapper that imports the C functions into
+newLISP.  It adds no logic of its own beyond type dispatch in
+`tuya:set-value`.
 
 The FOOP objects are plain lists.  You can always reach through to the
 raw handle with `(my-device 1)` and call `tuya:` functions directly --

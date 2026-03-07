@@ -1,5 +1,5 @@
-#ifndef SEATUYA_H
-#define SEATUYA_H
+#ifndef TUYA_H
+#define TUYA_H
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -21,59 +21,59 @@ extern "C" {
 /*  Version                                                           */
 /* ------------------------------------------------------------------ */
 
-const char *seatuya_version(void);
+const char *tuya_version(void);
 
 
 /* ------------------------------------------------------------------ */
 /*  Tuya command types                                                */
 /* ------------------------------------------------------------------ */
 
-enum seatuya_command {
-	SEATUYA_CMD_UDP                       = 0,
-	SEATUYA_CMD_AP_CONFIG                 = 1,
-	SEATUYA_CMD_ACTIVE                    = 2,
-	SEATUYA_CMD_BIND                      = 3,
-	SEATUYA_CMD_RENAME_GW                 = 4,
-	SEATUYA_CMD_RENAME_DEVICE             = 5,
-	SEATUYA_CMD_UNBIND                    = 6,
-	SEATUYA_CMD_CONTROL                   = 7,
-	SEATUYA_CMD_STATUS                    = 8,
-	SEATUYA_CMD_HEART_BEAT                = 9,
-	SEATUYA_CMD_DP_QUERY                  = 10,
-	SEATUYA_CMD_QUERY_WIFI                = 11,
-	SEATUYA_CMD_TOKEN_BIND                = 12,
-	SEATUYA_CMD_CONTROL_NEW               = 13,
-	SEATUYA_CMD_ENABLE_WIFI               = 14,
-	SEATUYA_CMD_DP_QUERY_NEW              = 16,
-	SEATUYA_CMD_SCENE_EXECUTE             = 17,
-	SEATUYA_CMD_UPDATEDPS                 = 18,
-	SEATUYA_CMD_UDP_NEW                   = 19,
-	SEATUYA_CMD_AP_CONFIG_NEW             = 20,
-	SEATUYA_CMD_GET_LOCAL_TIME            = 28,
-	SEATUYA_CMD_WEATHER_OPEN              = 32,
-	SEATUYA_CMD_WEATHER_DATA              = 33,
-	SEATUYA_CMD_STATE_UPLOAD_SYN          = 34,
-	SEATUYA_CMD_STATE_UPLOAD_SYN_RECV     = 35,
-	SEATUYA_CMD_HEART_BEAT_STOP           = 37,
-	SEATUYA_CMD_STREAM_TRANS              = 38,
-	SEATUYA_CMD_GET_WIFI_STATUS           = 43,
-	SEATUYA_CMD_WIFI_CONNECT_TEST         = 44,
-	SEATUYA_CMD_GET_MAC                   = 45,
-	SEATUYA_CMD_GET_IR_STATUS             = 46,
-	SEATUYA_CMD_IR_TX_RX_TEST             = 47,
-	SEATUYA_CMD_LAN_GW_ACTIVE            = 240,
-	SEATUYA_CMD_LAN_SUB_DEV_REQUEST      = 241,
-	SEATUYA_CMD_LAN_DELETE_SUB_DEV        = 242,
-	SEATUYA_CMD_LAN_REPORT_SUB_DEV       = 243,
-	SEATUYA_CMD_LAN_SCENE                 = 244,
-	SEATUYA_CMD_LAN_PUBLISH_CLOUD_CONFIG  = 245,
-	SEATUYA_CMD_LAN_PUBLISH_APP_CONFIG    = 246,
-	SEATUYA_CMD_LAN_EXPORT_APP_CONFIG     = 247,
-	SEATUYA_CMD_LAN_PUBLISH_SCENE_PANEL   = 248,
-	SEATUYA_CMD_LAN_REMOVE_GW             = 249,
-	SEATUYA_CMD_LAN_CHECK_GW_UPDATE       = 250,
-	SEATUYA_CMD_LAN_GW_UPDATE             = 251,
-	SEATUYA_CMD_LAN_SET_GW_CHANNEL        = 252
+enum tuya_command {
+	TUYA_CMD_UDP                       = 0,
+	TUYA_CMD_AP_CONFIG                 = 1,
+	TUYA_CMD_ACTIVE                    = 2,
+	TUYA_CMD_BIND                      = 3,
+	TUYA_CMD_RENAME_GW                 = 4,
+	TUYA_CMD_RENAME_DEVICE             = 5,
+	TUYA_CMD_UNBIND                    = 6,
+	TUYA_CMD_CONTROL                   = 7,
+	TUYA_CMD_STATUS                    = 8,
+	TUYA_CMD_HEART_BEAT                = 9,
+	TUYA_CMD_DP_QUERY                  = 10,
+	TUYA_CMD_QUERY_WIFI                = 11,
+	TUYA_CMD_TOKEN_BIND                = 12,
+	TUYA_CMD_CONTROL_NEW               = 13,
+	TUYA_CMD_ENABLE_WIFI               = 14,
+	TUYA_CMD_DP_QUERY_NEW              = 16,
+	TUYA_CMD_SCENE_EXECUTE             = 17,
+	TUYA_CMD_UPDATEDPS                 = 18,
+	TUYA_CMD_UDP_NEW                   = 19,
+	TUYA_CMD_AP_CONFIG_NEW             = 20,
+	TUYA_CMD_GET_LOCAL_TIME            = 28,
+	TUYA_CMD_WEATHER_OPEN              = 32,
+	TUYA_CMD_WEATHER_DATA              = 33,
+	TUYA_CMD_STATE_UPLOAD_SYN          = 34,
+	TUYA_CMD_STATE_UPLOAD_SYN_RECV     = 35,
+	TUYA_CMD_HEART_BEAT_STOP           = 37,
+	TUYA_CMD_STREAM_TRANS              = 38,
+	TUYA_CMD_GET_WIFI_STATUS           = 43,
+	TUYA_CMD_WIFI_CONNECT_TEST         = 44,
+	TUYA_CMD_GET_MAC                   = 45,
+	TUYA_CMD_GET_IR_STATUS             = 46,
+	TUYA_CMD_IR_TX_RX_TEST             = 47,
+	TUYA_CMD_LAN_GW_ACTIVE            = 240,
+	TUYA_CMD_LAN_SUB_DEV_REQUEST      = 241,
+	TUYA_CMD_LAN_DELETE_SUB_DEV        = 242,
+	TUYA_CMD_LAN_REPORT_SUB_DEV       = 243,
+	TUYA_CMD_LAN_SCENE                 = 244,
+	TUYA_CMD_LAN_PUBLISH_CLOUD_CONFIG  = 245,
+	TUYA_CMD_LAN_PUBLISH_APP_CONFIG    = 246,
+	TUYA_CMD_LAN_EXPORT_APP_CONFIG     = 247,
+	TUYA_CMD_LAN_PUBLISH_SCENE_PANEL   = 248,
+	TUYA_CMD_LAN_REMOVE_GW             = 249,
+	TUYA_CMD_LAN_CHECK_GW_UPDATE       = 250,
+	TUYA_CMD_LAN_GW_UPDATE             = 251,
+	TUYA_CMD_LAN_SET_GW_CHANNEL        = 252
 };
 
 
@@ -81,11 +81,11 @@ enum seatuya_command {
 /*  Protocol versions                                                 */
 /* ------------------------------------------------------------------ */
 
-enum seatuya_protocol {
-	SEATUYA_PROTO_V31,
-	SEATUYA_PROTO_V33,
-	SEATUYA_PROTO_V34,
-	SEATUYA_PROTO_V35
+enum tuya_protocol {
+	TUYA_PROTO_V31,
+	TUYA_PROTO_V33,
+	TUYA_PROTO_V34,
+	TUYA_PROTO_V35
 };
 
 
@@ -93,11 +93,11 @@ enum seatuya_protocol {
 /*  Session state                                                     */
 /* ------------------------------------------------------------------ */
 
-enum seatuya_session_state {
-	SEATUYA_SESSION_INVALID,
-	SEATUYA_SESSION_STARTING,
-	SEATUYA_SESSION_FINALIZING,
-	SEATUYA_SESSION_ESTABLISHED
+enum tuya_session_state {
+	TUYA_SESSION_INVALID,
+	TUYA_SESSION_STARTING,
+	TUYA_SESSION_FINALIZING,
+	TUYA_SESSION_ESTABLISHED
 };
 
 
@@ -105,15 +105,15 @@ enum seatuya_session_state {
 /*  Socket state                                                      */
 /* ------------------------------------------------------------------ */
 
-enum seatuya_socket_state {
-	SEATUYA_SOCK_NO_SUCH_HOST,
-	SEATUYA_SOCK_NO_SOCK_AVAIL,
-	SEATUYA_SOCK_FAILED,
-	SEATUYA_SOCK_DISCONNECTED,
-	SEATUYA_SOCK_CONNECTING,
-	SEATUYA_SOCK_CONNECTED,
-	SEATUYA_SOCK_READY,
-	SEATUYA_SOCK_RECEIVING
+enum tuya_socket_state {
+	TUYA_SOCK_NO_SUCH_HOST,
+	TUYA_SOCK_NO_SOCK_AVAIL,
+	TUYA_SOCK_FAILED,
+	TUYA_SOCK_DISCONNECTED,
+	TUYA_SOCK_CONNECTING,
+	TUYA_SOCK_CONNECTED,
+	TUYA_SOCK_READY,
+	TUYA_SOCK_RECEIVING
 };
 
 
@@ -121,7 +121,7 @@ enum seatuya_socket_state {
 /*  Opaque device handle                                              */
 /* ------------------------------------------------------------------ */
 
-typedef struct seatuya_device seatuya_device_t;
+typedef struct tuya_device tuya_device_t;
 
 
 /* ------------------------------------------------------------------ */
@@ -129,16 +129,42 @@ typedef struct seatuya_device seatuya_device_t;
 /* ------------------------------------------------------------------ */
 
 /*
+ * Recommended buffer size for internal round-trip operations.
+ * Used by high-level functions (set_value, status, etc.).
+ */
+
+/*
  * Create a device handle for the given protocol version.
  * version: one of "3.1", "3.3", "3.4", "3.5"
  * Returns NULL on invalid version.
  */
-seatuya_device_t *seatuya_create(const char *version);
+tuya_device_t *tuya_create(const char *version);
 
 /*
  * Destroy a device handle and free all resources.
  */
-void seatuya_destroy(seatuya_device_t *dev);
+void tuya_destroy(tuya_device_t *dev);
+
+
+/* ------------------------------------------------------------------ */
+/*  Credentials                                                       */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Store device_id and local_key on the handle.
+ * Call after create, before high-level operations.
+ */
+void tuya_set_credentials(tuya_device_t *dev,
+                             const char *device_id,
+                             const char *local_key);
+
+/*
+ * Credential getters (for FFI callers that need them).
+ * Return internal pointers -- do not free.
+ */
+const char *tuya_get_device_id(tuya_device_t *dev);
+const char *tuya_get_local_key(tuya_device_t *dev);
+const char *tuya_get_ip(tuya_device_t *dev);
 
 
 /* ------------------------------------------------------------------ */
@@ -147,19 +173,27 @@ void seatuya_destroy(seatuya_device_t *dev);
 
 /*
  * Connect to a Tuya device by hostname or IP address (port 6668).
+ * Also stores the IP internally for reconnect.
  */
-bool seatuya_connect(seatuya_device_t *dev,
+bool tuya_connect(tuya_device_t *dev,
                                    const char *hostname);
 
 /*
  * Disconnect from the device.
  */
-void seatuya_disconnect(seatuya_device_t *dev);
+void tuya_disconnect(tuya_device_t *dev);
 
 /*
  * Returns true if connected.
  */
-bool seatuya_is_connected(seatuya_device_t *dev);
+bool tuya_is_connected(tuya_device_t *dev);
+
+/*
+ * Reconnect if connection dropped.
+ * Re-negotiates session for protocol 3.4+.
+ * Requires credentials and IP to have been set previously.
+ */
+bool tuya_reconnect(tuya_device_t *dev);
 
 
 /* ------------------------------------------------------------------ */
@@ -170,20 +204,20 @@ bool seatuya_is_connected(seatuya_device_t *dev);
  * Perform full session negotiation (blocking).
  * For protocol 3.1/3.3 this is a no-op that returns success.
  */
-bool seatuya_negotiate_session(seatuya_device_t *dev,
+bool tuya_negotiate_session(tuya_device_t *dev,
                                              const char *local_key);
 
 /*
  * Start session negotiation (async-friendly).
  */
-bool seatuya_negotiate_session_start(seatuya_device_t *dev,
+bool tuya_negotiate_session_start(tuya_device_t *dev,
                                                    const char *local_key);
 
 /*
  * Finalize session negotiation with device response data.
  * buf/size: the raw response received from the device.
  */
-bool seatuya_negotiate_session_finalize(seatuya_device_t *dev,
+bool tuya_negotiate_session_finalize(tuya_device_t *dev,
                                                       unsigned char *buf,
                                                       int size,
                                                       const char *local_key);
@@ -193,10 +227,10 @@ bool seatuya_negotiate_session_finalize(seatuya_device_t *dev,
 /*  State queries                                                     */
 /* ------------------------------------------------------------------ */
 
-enum seatuya_protocol seatuya_get_protocol(seatuya_device_t *dev);
-enum seatuya_session_state seatuya_get_session_state(seatuya_device_t *dev);
-enum seatuya_socket_state seatuya_get_socket_state(seatuya_device_t *dev);
-int seatuya_get_last_error(seatuya_device_t *dev);
+enum tuya_protocol tuya_get_protocol(tuya_device_t *dev);
+enum tuya_session_state tuya_get_session_state(tuya_device_t *dev);
+enum tuya_socket_state tuya_get_socket_state(tuya_device_t *dev);
+int tuya_get_last_error(tuya_device_t *dev);
 
 
 /* ------------------------------------------------------------------ */
@@ -207,23 +241,23 @@ int seatuya_get_last_error(seatuya_device_t *dev);
  * Enable or disable asynchronous socket mode.
  * When enabled, receive() returns immediately if no data is available.
  */
-void seatuya_set_async_mode(seatuya_device_t *dev, bool async);
+void tuya_set_async_mode(tuya_device_t *dev, bool async);
 
 /*
  * Returns true if the socket has data available to read.
  */
-bool seatuya_is_socket_readable(seatuya_device_t *dev);
+bool tuya_is_socket_readable(tuya_device_t *dev);
 
 /*
  * Returns true if the socket is ready for writing.
  */
-bool seatuya_is_socket_writable(seatuya_device_t *dev);
+bool tuya_is_socket_writable(tuya_device_t *dev);
 
 /*
  * Mark the session as ready (call after connection + negotiation in
  * async mode for protocol 3.4+).
  */
-bool seatuya_set_session_ready(seatuya_device_t *dev);
+bool tuya_set_session_ready(tuya_device_t *dev);
 
 
 /* ------------------------------------------------------------------ */
@@ -238,9 +272,9 @@ bool seatuya_set_session_ready(seatuya_device_t *dev);
  * key:     device local key (encryption key)
  * Returns message size in bytes, or -1 on error.
  */
-int seatuya_build_message(seatuya_device_t *dev,
+int tuya_build_message(tuya_device_t *dev,
                                         unsigned char *buf,
-                                        enum seatuya_command cmd,
+                                        enum tuya_command cmd,
                                         const char *payload,
                                         const char *key);
 
@@ -249,9 +283,9 @@ int seatuya_build_message(seatuya_device_t *dev,
  * buf/size: raw received data
  * key:      device local key (encryption key)
  * Returns a newly allocated JSON string, or NULL on error.
- * Caller must free the result with seatuya_free_string().
+ * Caller must free the result with tuya_free_string().
  */
-char *seatuya_decode_message(seatuya_device_t *dev,
+char *tuya_decode_message(tuya_device_t *dev,
                                            unsigned char *buf, int size,
                                            const char *key);
 
@@ -261,10 +295,10 @@ char *seatuya_decode_message(seatuya_device_t *dev,
  * device_id:  device identifier
  * datapoints: JSON data points string (e.g. "{\"1\":true}")
  * Returns a newly allocated string, or NULL on error.
- * Caller must free the result with seatuya_free_string().
+ * Caller must free the result with tuya_free_string().
  */
-char *seatuya_generate_payload(seatuya_device_t *dev,
-                                             enum seatuya_command cmd,
+char *tuya_generate_payload(tuya_device_t *dev,
+                                             enum tuya_command cmd,
                                              const char *device_id,
                                              const char *datapoints);
 
@@ -277,7 +311,7 @@ char *seatuya_generate_payload(seatuya_device_t *dev,
  * Send raw bytes to the device.
  * Returns number of bytes sent, or -1 on error.
  */
-int seatuya_send(seatuya_device_t *dev, unsigned char *buf, int size);
+int tuya_send(tuya_device_t *dev, unsigned char *buf, int size);
 
 /*
  * Receive raw bytes from the device.
@@ -287,8 +321,36 @@ int seatuya_send(seatuya_device_t *dev, unsigned char *buf, int size);
  *          ignored in async mode)
  * Returns number of bytes received, or -1 on error/no data.
  */
-int seatuya_receive(seatuya_device_t *dev, unsigned char *buf,
+int tuya_receive(tuya_device_t *dev, unsigned char *buf,
                     int maxsize, int minsize);
+
+
+/* ------------------------------------------------------------------ */
+/*  High-level round-trip operations                                  */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Set a single data point value.  Full round-trip: generate payload,
+ * build message, send, receive, decode.
+ * Returns a malloc'd JSON response string, or NULL on error.
+ * Caller must free the result with tuya_free_string().
+ * Requires credentials to have been set with tuya_set_credentials().
+ */
+char *tuya_set_value_bool(tuya_device_t *dev, int dp, bool value);
+char *tuya_set_value_int(tuya_device_t *dev, int dp, int value);
+char *tuya_set_value_string(tuya_device_t *dev, int dp,
+                               const char *value);
+char *tuya_set_value_float(tuya_device_t *dev, int dp, double value);
+
+/*
+ * Convenience wrappers (tinytuya equivalents).
+ * Returns a malloc'd JSON response string, or NULL on error.
+ * Caller must free the result with tuya_free_string().
+ */
+char *tuya_turn_on(tuya_device_t *dev, int switch_dp);
+char *tuya_turn_off(tuya_device_t *dev, int switch_dp);
+char *tuya_status(tuya_device_t *dev);
+char *tuya_heartbeat(tuya_device_t *dev);
 
 
 /* ------------------------------------------------------------------ */
@@ -296,22 +358,22 @@ int seatuya_receive(seatuya_device_t *dev, unsigned char *buf,
 /* ------------------------------------------------------------------ */
 
 /*
- * Free a string returned by seatuya_decode_message() or
- * seatuya_generate_payload().
+ * Free a string returned by tuya_decode_message(),
+ * tuya_generate_payload(), or any high-level round-trip function.
  */
-void seatuya_free_string(char *str);
+void tuya_free_string(char *str);
 
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                         */
 /* ------------------------------------------------------------------ */
 
-enum { SEATUYA_DEFAULT_PORT = 6668 };
-enum { SEATUYA_RECOMMENDED_BUFSIZE = 1024 };
+enum { TUYA_DEFAULT_PORT = 6668 };
+enum { TUYA_RECOMMENDED_BUFSIZE = 1024 };
 
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* SEATUYA_H */
+#endif /* TUYA_H */

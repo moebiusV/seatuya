@@ -22,10 +22,11 @@
 ;; ====================================================================
 
 (define (tuya-devices:connect-device version ip device-id local-key)
-  "Create handle, connect, negotiate session, store credentials.
+  "Create handle, store credentials, connect, negotiate session.
    Returns handle or throws on failure."
   (let (dev (tuya:create version))
     (unless dev (throw (string "unsupported protocol version: " version)))
+    (tuya:set-credentials dev device-id local-key)
     (unless (tuya:connect dev ip)
       (tuya:destroy dev)
       (throw (string "connection failed to " ip)))
@@ -34,24 +35,17 @@
         (tuya:disconnect dev)
         (tuya:destroy dev)
         (throw "session negotiation failed")))
-    (tuya:set-credentials dev device-id local-key)
     dev))
 
-(define (tuya-devices:reconnect-device dev ip local-key)
+(define (tuya-devices:reconnect-device dev)
   "Reconnect if the connection has dropped.  Re-negotiates session
    for protocol 3.4+.  Returns true if connected, nil on failure."
-  (if (tuya:is-connected dev) true
-    (begin
-      (tuya:connect dev ip)
-      (when (>= (tuya:get-protocol dev) tuya:PROTO_V34)
-        (tuya:negotiate-session dev local-key))
-      (tuya:is-connected dev))))
+  (tuya:reconnect dev))
 
 (define (tuya-devices:destroy-device dev)
-  "Disconnect, clear credentials, destroy handle."
+  "Disconnect and destroy handle."
   (when dev
     (when (tuya:is-connected dev) (tuya:disconnect dev))
-    (tuya:clear-credentials dev)
     (tuya:destroy dev)))
 
 ;; RGB-to-HSV conversion (pure newLISP math)
@@ -116,7 +110,7 @@
 
 (define (OutletDevice:reconnect)
   "Reconnect if the connection has dropped."
-  (tuya-devices:reconnect-device (self 1) (self 4) (self 3)))
+  (tuya-devices:reconnect-device (self 1)))
 
 (define (OutletDevice:status)
   "Query all data points."
@@ -204,7 +198,7 @@
   (tuya:set-value (self 1) (self 9) colourtemp))
 
 (define (BulbDevice:reconnect)
-  (tuya-devices:reconnect-device (self 1) (self 4) (self 3)))
+  (tuya-devices:reconnect-device (self 1)))
 
 (define (BulbDevice:status)
   (tuya:status (self 1)))
@@ -264,7 +258,7 @@
   (tuya:set-value (self 1) 2 pct))
 
 (define (CoverDevice:reconnect)
-  (tuya-devices:reconnect-device (self 1) (self 4) (self 3)))
+  (tuya-devices:reconnect-device (self 1)))
 
 (define (CoverDevice:status)
   (tuya:status (self 1)))
@@ -321,7 +315,7 @@
                 (when raw (div raw (self 9)))))))))))
 
 (define (ThermostatDevice:reconnect)
-  (tuya-devices:reconnect-device (self 1) (self 4) (self 3)))
+  (tuya-devices:reconnect-device (self 1)))
 
 (define (ThermostatDevice:status)
   (tuya:status (self 1)))
@@ -369,7 +363,7 @@
                 (list "voltage_V"  (div (or (lookup "20" dps) 0) 10.0))))))))))
 
 (define (SocketDevice:reconnect)
-  (tuya-devices:reconnect-device (self 1) (self 4) (self 3)))
+  (tuya-devices:reconnect-device (self 1)))
 
 (define (SocketDevice:status)
   (tuya:status (self 1)))
@@ -435,7 +429,7 @@
   (tuya:set-value (self 1) 22 (int minutes)))
 
 (define (ClimateDevice:reconnect)
-  (tuya-devices:reconnect-device (self 1) (self 4) (self 3)))
+  (tuya-devices:reconnect-device (self 1)))
 
 (define (ClimateDevice:status)
   (tuya:status (self 1)))
@@ -478,7 +472,7 @@
   (tuya:set-value (self 1) 106 level))
 
 (define (DoorbellDevice:reconnect)
-  (tuya-devices:reconnect-device (self 1) (self 4) (self 3)))
+  (tuya-devices:reconnect-device (self 1)))
 
 (define (DoorbellDevice:status)
   (tuya:status (self 1)))
@@ -539,7 +533,7 @@
       (tuya:set-value (self 1) 13 "send"))))
 
 (define (IRRemoteControlDevice:reconnect)
-  (tuya-devices:reconnect-device (self 1) (self 4) (self 3)))
+  (tuya-devices:reconnect-device (self 1)))
 
 (define (IRRemoteControlDevice:status)
   (tuya:status (self 1)))
@@ -600,7 +594,7 @@
             (when dps (lookup "102" dps))))))))
 
 (define (InverterHeatPumpDevice:reconnect)
-  (tuya-devices:reconnect-device (self 1) (self 4) (self 3)))
+  (tuya-devices:reconnect-device (self 1)))
 
 (define (InverterHeatPumpDevice:status)
   (tuya:status (self 1)))
@@ -652,7 +646,7 @@
   (tuya:set-value (self 1) 102 (int secs)))
 
 (define (PresenceDetectorDevice:reconnect)
-  (tuya-devices:reconnect-device (self 1) (self 4) (self 3)))
+  (tuya-devices:reconnect-device (self 1)))
 
 (define (PresenceDetectorDevice:status)
   (tuya:status (self 1)))

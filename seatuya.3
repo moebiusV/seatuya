@@ -1,60 +1,89 @@
-.TH SEATUYA 3 "2026-03-06" "seatuya 0.1.0" "Library Functions Manual"
+.TH SEATUYA 3 "2026-03-07" "seatuya 0.2.0" "Library Functions Manual"
 .SH NAME
 seatuya \- C library for local control of Tuya smart devices
 .SH SYNOPSIS
 .B #include <seatuya/seatuya.h>
 .PP
-.BI "const char *seatuya_version(void);"
+.BI "const char *tuya_version(void);"
 .PP
-.BI "seatuya_device_t *seatuya_create(const char *" version ");"
+.BI "tuya_device_t *tuya_create(const char *" version ");"
 .br
-.BI "void seatuya_destroy(seatuya_device_t *" dev ");"
+.BI "void tuya_destroy(tuya_device_t *" dev ");"
 .PP
-.BI "bool seatuya_connect(seatuya_device_t *" dev ", const char *" hostname ");"
+.BI "void tuya_set_credentials(tuya_device_t *" dev ","
+.BI "    const char *" device_id ", const char *" local_key ");"
 .br
-.BI "void seatuya_disconnect(seatuya_device_t *" dev ");"
+.BI "const char *tuya_get_device_id(tuya_device_t *" dev ");"
 .br
-.BI "bool seatuya_is_connected(seatuya_device_t *" dev ");"
+.BI "const char *tuya_get_local_key(tuya_device_t *" dev ");"
+.br
+.BI "const char *tuya_get_ip(tuya_device_t *" dev ");"
 .PP
-.BI "bool seatuya_negotiate_session(seatuya_device_t *" dev ", const char *" key ");"
+.BI "bool tuya_connect(tuya_device_t *" dev ", const char *" hostname ");"
 .br
-.BI "bool seatuya_negotiate_session_start(seatuya_device_t *" dev ", const char *" key ");"
+.BI "void tuya_disconnect(tuya_device_t *" dev ");"
 .br
-.BI "bool seatuya_negotiate_session_finalize(seatuya_device_t *" dev ","
+.BI "bool tuya_is_connected(tuya_device_t *" dev ");"
+.br
+.BI "bool tuya_reconnect(tuya_device_t *" dev ");"
+.PP
+.BI "bool tuya_negotiate_session(tuya_device_t *" dev ", const char *" key ");"
+.br
+.BI "bool tuya_negotiate_session_start(tuya_device_t *" dev ", const char *" key ");"
+.br
+.BI "bool tuya_negotiate_session_finalize(tuya_device_t *" dev ","
 .BI "    unsigned char *" buf ", int " size ", const char *" key ");"
 .PP
-.BI "int seatuya_build_message(seatuya_device_t *" dev ", unsigned char *" buf ","
-.BI "    enum seatuya_command " cmd ", const char *" payload ", const char *" key ");"
+.BI "char *tuya_set_value_bool(tuya_device_t *" dev ", int " dp ", bool " value ");"
 .br
-.BI "char *seatuya_decode_message(seatuya_device_t *" dev ", unsigned char *" buf ","
+.BI "char *tuya_set_value_int(tuya_device_t *" dev ", int " dp ", int " value ");"
+.br
+.BI "char *tuya_set_value_string(tuya_device_t *" dev ", int " dp ","
+.BI "    const char *" value ");"
+.br
+.BI "char *tuya_set_value_float(tuya_device_t *" dev ", int " dp ","
+.BI "    double " value ");"
+.PP
+.BI "char *tuya_turn_on(tuya_device_t *" dev ", int " switch_dp ");"
+.br
+.BI "char *tuya_turn_off(tuya_device_t *" dev ", int " switch_dp ");"
+.br
+.BI "char *tuya_status(tuya_device_t *" dev ");"
+.br
+.BI "char *tuya_heartbeat(tuya_device_t *" dev ");"
+.PP
+.BI "int tuya_build_message(tuya_device_t *" dev ", unsigned char *" buf ","
+.BI "    enum tuya_command " cmd ", const char *" payload ", const char *" key ");"
+.br
+.BI "char *tuya_decode_message(tuya_device_t *" dev ", unsigned char *" buf ","
 .BI "    int " size ", const char *" key ");"
 .br
-.BI "char *seatuya_generate_payload(seatuya_device_t *" dev ","
-.BI "    enum seatuya_command " cmd ", const char *" device_id ","
+.BI "char *tuya_generate_payload(tuya_device_t *" dev ","
+.BI "    enum tuya_command " cmd ", const char *" device_id ","
 .BI "    const char *" datapoints ");"
 .PP
-.BI "int seatuya_send(seatuya_device_t *" dev ", unsigned char *" buf ", int " size ");"
+.BI "int tuya_send(tuya_device_t *" dev ", unsigned char *" buf ", int " size ");"
 .br
-.BI "int seatuya_receive(seatuya_device_t *" dev ", unsigned char *" buf ","
+.BI "int tuya_receive(tuya_device_t *" dev ", unsigned char *" buf ","
 .BI "    int " maxsize ", int " minsize ");"
 .PP
-.BI "void seatuya_free_string(char *" str ");"
+.BI "void tuya_free_string(char *" str ");"
 .PP
-.BI "void seatuya_set_async_mode(seatuya_device_t *" dev ", bool " async ");"
+.BI "void tuya_set_async_mode(tuya_device_t *" dev ", bool " async ");"
 .br
-.BI "bool seatuya_is_socket_readable(seatuya_device_t *" dev ");"
+.BI "bool tuya_is_socket_readable(tuya_device_t *" dev ");"
 .br
-.BI "bool seatuya_is_socket_writable(seatuya_device_t *" dev ");"
+.BI "bool tuya_is_socket_writable(tuya_device_t *" dev ");"
 .br
-.BI "bool seatuya_set_session_ready(seatuya_device_t *" dev ");"
+.BI "bool tuya_set_session_ready(tuya_device_t *" dev ");"
 .PP
-.BI "enum seatuya_protocol seatuya_get_protocol(seatuya_device_t *" dev ");"
+.BI "enum tuya_protocol tuya_get_protocol(tuya_device_t *" dev ");"
 .br
-.BI "enum seatuya_session_state seatuya_get_session_state(seatuya_device_t *" dev ");"
+.BI "enum tuya_session_state tuya_get_session_state(tuya_device_t *" dev ");"
 .br
-.BI "enum seatuya_socket_state seatuya_get_socket_state(seatuya_device_t *" dev ");"
+.BI "enum tuya_socket_state tuya_get_socket_state(tuya_device_t *" dev ");"
 .br
-.BI "int seatuya_get_last_error(seatuya_device_t *" dev ");"
+.BI "int tuya_get_last_error(tuya_device_t *" dev ");"
 .SH DESCRIPTION
 .B seatuya
 is a C wrapper around the tuyapp C++ library.
@@ -62,116 +91,202 @@ It provides a stable C ABI for communicating with Tuya / Smart Life
 devices on the local network, supporting protocol versions 3.1, 3.3,
 3.4, and 3.5.
 .PP
-The existing Tuya libraries are language-specific: tuyapp requires C++,
-and tinytuya requires Python.
-.B seatuya
-exposes the same functionality through a plain C interface with no C++
-types crossing the ABI boundary: opaque struct pointers, C strings,
-ints, and enums.
-Any language with a foreign-function interface (FFI) can link against
-.B libseatuya
-and control Tuya devices directly, without embedding a C++ runtime
-or a Python interpreter.
+The API has two tiers:
+.TP
+.B High-level (recommended)
+Store credentials once with
+.BR tuya_set_credentials (),
+then use
+.BR tuya_set_value_bool (),
+.BR tuya_set_value_int (),
+.BR tuya_turn_on (),
+.BR tuya_status (),
+etc.
+Each call performs a complete round-trip (generate payload, encrypt,
+send, receive, decrypt) and returns a malloc'd JSON response string.
+.TP
+.B Low-level
+.BR tuya_generate_payload (),
+.BR tuya_build_message (),
+.BR tuya_send (),
+.BR tuya_receive (),
+and
+.BR tuya_decode_message ()
+give full control over each step.
+Useful for pipelining, async workflows, or custom command types.
 .SS Lifecycle
-.BR seatuya_create ()
+.BR tuya_create ()
 allocates a device handle for the given protocol version
 ("3.1", "3.3", "3.4", or "3.5").
 Returns NULL on invalid version.
 The handle must be freed with
-.BR seatuya_destroy ().
+.BR tuya_destroy ().
+.SS Credentials
+.BR tuya_set_credentials ()
+stores the device_id and local_key on the handle.
+These are required by all high-level round-trip functions.
+.BR tuya_get_device_id (),
+.BR tuya_get_local_key (),
+and
+.BR tuya_get_ip ()
+return the stored values (internal pointers -- do not free).
 .SS Connection
-.BR seatuya_connect ()
-opens a TCP connection to the device on port 6668.
+.BR tuya_connect ()
+opens a TCP connection to the device on port 6668 and stores the
+IP internally for later use by
+.BR tuya_reconnect ().
 For protocol 3.4 and above, call
-.BR seatuya_negotiate_session ()
+.BR tuya_negotiate_session ()
 after connecting to establish an encrypted session.
 For 3.1 and 3.3, session negotiation is a no-op.
+.PP
+.BR tuya_reconnect ()
+re-establishes a dropped connection using the stored IP and
+local_key.  For protocol 3.4+, it also re-negotiates the session.
+If already connected, it returns immediately.
+.SS High-level operations
+.BR tuya_set_value_bool (),
+.BR tuya_set_value_int (),
+.BR tuya_set_value_string (),
+and
+.BR tuya_set_value_float ()
+set a single data point on the device.
+Each performs the full round-trip and returns a malloc'd JSON
+response string, or NULL on error.
+.PP
+.BR tuya_turn_on ()
+and
+.BR tuya_turn_off ()
+are convenience wrappers that set a boolean data point to true
+or false.
+.PP
+.BR tuya_status ()
+queries all data points from the device.
+.PP
+.BR tuya_heartbeat ()
+sends a heartbeat to the device.
+.PP
+All returned strings must be freed with
+.BR tuya_free_string ().
 .SS Async mode
 By default, receive calls block.
-.BR seatuya_set_async_mode ()
+.BR tuya_set_async_mode ()
 enables non-blocking operation.
 When async mode is on,
-.BR seatuya_receive ()
+.BR tuya_receive ()
 returns immediately with \-1 if no data is available, and
-.BR seatuya_is_socket_readable ()
+.BR tuya_is_socket_readable ()
 can be used to poll.
 For protocol 3.4+, call
-.BR seatuya_set_session_ready ()
+.BR tuya_set_session_ready ()
 after async negotiation completes.
 .SS Session negotiation
 Protocol versions 3.4 and 3.5 require a key-exchange handshake before
 encrypted communication can begin.
-.BR seatuya_negotiate_session ()
+.BR tuya_negotiate_session ()
 performs this in a single blocking call.
 For async workflows, use
-.BR seatuya_negotiate_session_start ()
+.BR tuya_negotiate_session_start ()
 to send the initial handshake, then call
-.BR seatuya_negotiate_session_finalize ()
+.BR tuya_negotiate_session_finalize ()
 with the device's response.
-.SS Messages
-.BR seatuya_build_message ()
+.SS Low-level messages
+.BR tuya_build_message ()
 encrypts and frames a JSON payload for transmission.
-.BR seatuya_decode_message ()
+.BR tuya_decode_message ()
 decrypts a received response.
 Both require the device's local encryption key (a 16-byte hex string
 from the Tuya cloud).
 .PP
-.BR seatuya_generate_payload ()
+.BR tuya_generate_payload ()
 builds the JSON payload structure expected by the device for a given
 command and set of data points.
 .PP
 Strings returned by
-.BR seatuya_decode_message ()
+.BR tuya_decode_message ()
 and
-.BR seatuya_generate_payload ()
+.BR tuya_generate_payload ()
 are heap-allocated and must be freed with
-.BR seatuya_free_string ().
+.BR tuya_free_string ().
 .SS State queries
-.BR seatuya_get_protocol (),
-.BR seatuya_get_session_state (),
-.BR seatuya_get_socket_state (),
+.BR tuya_get_protocol (),
+.BR tuya_get_session_state (),
+.BR tuya_get_socket_state (),
 and
-.BR seatuya_get_last_error ()
+.BR tuya_get_last_error ()
 return the current state of the device handle.
 .SH RETURN VALUES
-.BR seatuya_connect (),
-.BR seatuya_negotiate_session (),
+.BR tuya_connect (),
+.BR tuya_reconnect (),
+.BR tuya_negotiate_session (),
 and related session functions return
 .B true
 on success and
 .B false
 on failure.
 .PP
-.BR seatuya_build_message ()
+.BR tuya_set_value_bool (),
+.BR tuya_set_value_int (),
+.BR tuya_set_value_string (),
+.BR tuya_set_value_float (),
+.BR tuya_turn_on (),
+.BR tuya_turn_off (),
+.BR tuya_status (),
+and
+.BR tuya_heartbeat ()
+return a malloc'd JSON string on success, or NULL on error.
+.PP
+.BR tuya_build_message ()
 returns the message size in bytes, or \-1 on error.
 .PP
-.BR seatuya_send ()
+.BR tuya_send ()
 and
-.BR seatuya_receive ()
+.BR tuya_receive ()
 return byte counts, or \-1 on error.
 .SH EXAMPLES
-Connect to a device and turn on data point 1:
+Connect to a device and turn on data point 1 (high-level API):
 .PP
 .RS
 .nf
-seatuya_device_t *dev = seatuya_create("3.4");
-seatuya_connect(dev, "192.168.1.100");
-seatuya_negotiate_session(dev, local_key);
+tuya_device_t *dev = tuya_create("3.4");
+tuya_set_credentials(dev, device_id, local_key);
+tuya_connect(dev, "192.168.1.100");
+tuya_negotiate_session(dev, local_key);
 
-char *payload = seatuya_generate_payload(dev,
-    SEATUYA_CMD_CONTROL, device_id, "{\\"1\\":true}");
+char *resp = tuya_turn_on(dev, 1);
+printf("%s\\n", resp);
+tuya_free_string(resp);
+
+resp = tuya_status(dev);
+printf("%s\\n", resp);
+tuya_free_string(resp);
+
+tuya_destroy(dev);
+.fi
+.RE
+.PP
+The same using the low-level API:
+.PP
+.RS
+.nf
+tuya_device_t *dev = tuya_create("3.4");
+tuya_connect(dev, "192.168.1.100");
+tuya_negotiate_session(dev, local_key);
+
+char *payload = tuya_generate_payload(dev,
+    TUYA_CMD_CONTROL, device_id, "{\\"1\\":true}");
 unsigned char buf[1024];
-int n = seatuya_build_message(dev, buf,
-    SEATUYA_CMD_CONTROL, payload, local_key);
-seatuya_free_string(payload);
+int n = tuya_build_message(dev, buf,
+    TUYA_CMD_CONTROL, payload, local_key);
+tuya_free_string(payload);
 
-seatuya_send(dev, buf, n);
-n = seatuya_receive(dev, buf, sizeof buf, 0);
-char *response = seatuya_decode_message(dev, buf, n, local_key);
+tuya_send(dev, buf, n);
+n = tuya_receive(dev, buf, sizeof buf, 0);
+char *response = tuya_decode_message(dev, buf, n, local_key);
 printf("%s\\n", response);
-seatuya_free_string(response);
+tuya_free_string(response);
 
-seatuya_destroy(dev);
+tuya_destroy(dev);
 .fi
 .RE
 .PP
@@ -182,28 +297,24 @@ programs (seatuya-wizard.lsp, sousvide-ramp.lsp) use it to control
 real hardware without writing any C.
 .SS newLISP convenience layer
 .B seatuya.lsp
-also provides high-level functions that collapse the five-step
-send/receive round-trip into a single call.
-These correspond to tinytuya's base
-.B Device
-class methods:
-.BR tuya:set-value
-is the equivalent of Python's
-.BR device.set_value() ,
-and
-.BR tuya:status
-is the equivalent of
-.BR device.status() .
+wraps the high-level C functions so the five-step round-trip is a
+single call.
 Store credentials once with
 .BR tuya:set-credentials ,
-then call these without passing device-id and local-key each time:
+then use
+.BR tuya:set-value ,
+.BR tuya:turn-on ,
+.BR tuya:turn-off ,
+.BR tuya:status ,
+and
+.BR tuya:heartbeat :
 .PP
 .RS
 .nf
 (load "seatuya.lsp")
 (setq dev (tuya:create "3.3"))
-(tuya:connect dev "192.168.1.50")
 (tuya:set-credentials dev device-id local-key)
+(tuya:connect dev "192.168.1.50")
 (tuya:set-value dev 1 true)     ; turn on DP 1
 (tuya:status dev)                ; query all DPs
 (tuya:destroy dev)
@@ -262,25 +373,16 @@ for protocol 3.4+), and
 Constructor arguments allow overriding default DP numbers
 for devices with non-standard mappings.
 .PP
-Unlike tinytuya, where the
-.B Device
-object owns the socket, credentials, and framing logic,
-seatuya splits these across three layers: the C library
-(transport and encryption),
-.B seatuya.lsp
-(buffer management and one-call round-trips), and
-.B tuya-devices.lsp
-(DP mappings and named methods).
-The FOOP objects are plain lists; callers can always access
-the raw handle directly and call
-.B tuya:
-functions when needed.
+The device handle stores credentials and IP internally.  The
+FOOP objects also carry these fields for convenience, but the
+C library is the source of truth for connection state and
+round-trip operations.
 .SH CONSTANTS
 .TP
-.B SEATUYA_DEFAULT_PORT
+.B TUYA_DEFAULT_PORT
 6668 (Tuya local protocol port).
 .TP
-.B SEATUYA_RECOMMENDED_BUFSIZE
+.B TUYA_RECOMMENDED_BUFSIZE
 1024 bytes.
 .SH SEE ALSO
 .BR tuyapp (3)
