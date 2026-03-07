@@ -113,7 +113,7 @@ library once, and every language gets Tuya for free.
 | `crypto-fast.lsp` | complete libcrypto FFI wrapper (replaces the built-in crypto.lsp with native calls, caller-owned buffers, SHA3, HMAC, PBKDF2, CSPRNG) |
 | `libtls.lsp` | libtls FFI wrapper for HTTPS |
 | `seatuya.lsp` | newLISP bindings for libseatuya |
-| `tuya-devices.lsp` | FOOP device classes (OutletDevice, BulbDevice, CoverDevice, ThermostatDevice, FanDevice, LockDevice, SirenDevice) |
+| `tuya-devices.lsp` | FOOP device classes (OutletDevice, BulbDevice, CoverDevice, ThermostatDevice, SocketDevice, ClimateDevice, DoorbellDevice, IRRemoteControlDevice, InverterHeatPumpDevice, PresenceDetectorDevice) |
 
 **Example programs (C):**
 
@@ -298,21 +298,12 @@ seatuya mirrors this in two layers:
 
 - **`tuya-devices.lsp`** corresponds to tinytuya's device subclasses.
   `OutletDevice`, `BulbDevice`, and `CoverDevice` follow the same DP
-  mappings as tinytuya's core classes.  `ThermostatDevice` follows
-  tinytuya's Contrib thermostat.
+  mappings as tinytuya's core classes.  The remaining classes follow
+  their counterparts in tinytuya's community-contributed `Contrib` module.
 
-`FanDevice`, `LockDevice`, and `SirenDevice` do not have tinytuya
-counterparts.  They are based on common Tuya DP conventions documented
-in the Tuya developer portal and tested against real devices, but they
-are not translations of existing tinytuya code.
-
-Device types that tinytuya's Contrib module provides but seatuya does
-not yet cover include: `IRRemoteControlDevice`, `DoorbellDevice`,
-`ClimateDevice` (portable AC units), `SocketDevice` (energy-monitoring
-sockets), `InverterHeatPumpDevice`, and `PresenceDetectorDevice`.
-There is also no generic `SensorDevice` for read-only devices like
-humidity sensors or air quality monitors -- these currently work
-through `:status` on any device class, but lack named getters.
+Read-only devices like humidity sensors or air quality monitors work
+through `:status` on any device class but lack named getters.  There is
+no generic `SensorDevice` yet.
 
 ### Architectural difference
 
@@ -340,9 +331,12 @@ the abstraction is a convenience, not a cage.
 | `BulbDevice` | `BulbDevice` (core) | `:set-colour`, `:set-brightness-pct`, `:set-colourtemp-pct`, `:set-white` |
 | `CoverDevice` | `CoverDevice` (core) | `:open-cover`, `:close-cover`, `:stop-cover`, `:set-position` |
 | `ThermostatDevice` | `ThermostatDevice` (contrib) | `:set-temperature`, `:set-mode`, `:get-temperature` |
-| `FanDevice` | -- | `:set-speed`, `:set-oscillation` |
-| `LockDevice` | -- | `:lock`, `:unlock` |
-| `SirenDevice` | -- | `:set-volume`, `:set-duration` |
+| `SocketDevice` | `SocketDevice` (contrib) | `:turn-on`, `:turn-off`, `:get-energy` |
+| `ClimateDevice` | `ClimateDevice` (contrib) | `:set-temperature`, `:set-mode`, `:set-fan-speed` |
+| `DoorbellDevice` | `DoorbellDevice` (contrib) | `:set-volume`, `:set-motion-switch`, `:set-motion-sensitivity` |
+| `IRRemoteControlDevice` | `IRRemoteControlDevice` (contrib) | `:study-start`, `:study-end`, `:send-button`, `:send-key` |
+| `InverterHeatPumpDevice` | `InverterHeatPumpDevice` (contrib) | `:set-target-temp`, `:set-silence-mode`, `:get-inlet-temp` |
+| `PresenceDetectorDevice` | `PresenceDetectorDevice` (contrib) | `:set-sensitivity`, `:set-near-detection`, `:set-far-detection` |
 
 All classes also support `:status` (query all DPs), `:reconnect`
 (re-establish a dropped connection, including session negotiation

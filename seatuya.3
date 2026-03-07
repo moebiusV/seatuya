@@ -239,14 +239,17 @@ for that device category:
 and
 .BR CoverDevice
 follow the same DP mappings as tinytuya's core device classes.
-.BR ThermostatDevice
-follows tinytuya's community-contributed thermostat.
-.BR FanDevice ,
-.BR LockDevice ,
+.BR ThermostatDevice ,
+.BR SocketDevice ,
+.BR ClimateDevice ,
+.BR DoorbellDevice ,
+.BR IRRemoteControlDevice ,
+.BR InverterHeatPumpDevice ,
 and
-.BR SirenDevice
-are based on common Tuya DP conventions but do not have
-tinytuya counterparts.
+.BR PresenceDetectorDevice
+follow their counterparts in tinytuya's community-contributed
+.B Contrib
+module.
 .PP
 All classes support
 .B :status

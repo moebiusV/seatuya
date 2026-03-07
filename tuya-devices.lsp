@@ -331,109 +331,331 @@
 
 
 ;; ====================================================================
-;;  FanDevice (fans, air purifiers)
+;;  SocketDevice (energy-monitoring smart sockets)
 ;; ====================================================================
 ;;
-;; Common DPs:
-;;   DP 1: switch (bool)
-;;   DP 3: speed (int or enum)
-;;   DP 4: oscillation (bool)
+;; Follows tinytuya Contrib SocketDevice.
+;; DP 1: switch (bool)
+;; DP 18: current (mA)
+;; DP 19: power (dW, divide by 10 for watts)
+;; DP 20: voltage (dV, divide by 10 for volts)
 
-(new Class 'FanDevice)
+(new Class 'SocketDevice)
 
-(define (FanDevice:FanDevice version ip device-id local-key
-          (dp-switch 1) (dp-speed 3) (dp-oscillation 4))
-  "Create a fan device.
-   Fields: 0=class, 1=handle, 2=device-id, 3=local-key, 4=ip,
-   5=dp-switch, 6=dp-speed, 7=dp-oscillation."
+(define (SocketDevice:SocketDevice version ip device-id local-key)
+  "Create an energy-monitoring socket device.
+   Fields: 0=class, 1=handle, 2=device-id, 3=local-key, 4=ip."
   (let (dev (tuya-devices:connect-device version ip device-id local-key))
-    (list FanDevice dev device-id local-key ip dp-switch dp-speed dp-oscillation)))
+    (list SocketDevice dev device-id local-key ip)))
 
-(define (FanDevice:turn-on)
-  (tuya:set-value (self 1) (self 5) true))
+(define (SocketDevice:turn-on (switch 1))
+  (tuya:set-value (self 1) switch true))
 
-(define (FanDevice:turn-off)
-  (tuya:set-value (self 1) (self 5) nil))
+(define (SocketDevice:turn-off (switch 1))
+  (tuya:set-value (self 1) switch nil))
 
-(define (FanDevice:set-speed speed)
-  "Set fan speed (int or string depending on device)."
-  (tuya:set-value (self 1) (self 6) speed))
+(define (SocketDevice:get-energy)
+  "Query status and return assoc-list of current (mA), power (W), voltage (V).
+   Returns nil if status query fails."
+  (let (resp (tuya:status (self 1)))
+    (when resp
+      (let (parsed (json-parse resp))
+        (when parsed
+          (let (dps (lookup "dps" parsed))
+            (when dps
+              (list
+                (list "current_mA" (or (lookup "18" dps) 0))
+                (list "power_W"    (div (or (lookup "19" dps) 0) 10.0))
+                (list "voltage_V"  (div (or (lookup "20" dps) 0) 10.0))))))))))
 
-(define (FanDevice:set-oscillation flag)
-  "Enable or disable oscillation."
-  (tuya:set-value (self 1) (self 7) (if flag true nil)))
-
-(define (FanDevice:reconnect)
+(define (SocketDevice:reconnect)
   (tuya-devices:reconnect-device (self 1) (self 4) (self 3)))
 
-(define (FanDevice:status)
+(define (SocketDevice:status)
   (tuya:status (self 1)))
 
-(define (FanDevice:destroy)
+(define (SocketDevice:destroy)
   (tuya-devices:destroy-device (self 1)))
 
 
 ;; ====================================================================
-;;  LockDevice
+;;  ClimateDevice (portable air conditioners)
 ;; ====================================================================
+;;
+;; Follows tinytuya Contrib ClimateDevice.
+;; DP 1: power (bool)
+;; DP 2: target temp (int)
+;; DP 3: current temp (int)
+;; DP 4: mode (enum: "cold"/"hot"/"wind"/"auto")
+;; DP 5: fan speed (enum: "1"/"2"/"3")
+;; DP 19: temp unit (enum: "c"/"f")
+;; DP 22: timer (int, minutes)
 
-(new Class 'LockDevice)
+(new Class 'ClimateDevice)
 
-(define (LockDevice:LockDevice version ip device-id local-key (dp-lock 1))
-  "Create a lock device.
-   Fields: 0=class, 1=handle, 2=device-id, 3=local-key, 4=ip, 5=dp-lock."
+(define (ClimateDevice:ClimateDevice version ip device-id local-key)
+  "Create a portable AC / climate device.
+   Fields: 0=class, 1=handle, 2=device-id, 3=local-key, 4=ip."
   (let (dev (tuya-devices:connect-device version ip device-id local-key))
-    (list LockDevice dev device-id local-key ip dp-lock)))
+    (list ClimateDevice dev device-id local-key ip)))
 
-(define (LockDevice:lock)
-  (tuya:set-value (self 1) (self 5) true))
+(define (ClimateDevice:turn-on)
+  (tuya:set-value (self 1) 1 true))
 
-(define (LockDevice:unlock)
-  (tuya:set-value (self 1) (self 5) nil))
+(define (ClimateDevice:turn-off)
+  (tuya:set-value (self 1) 1 nil))
 
-(define (LockDevice:reconnect)
+(define (ClimateDevice:set-temperature temp)
+  "Set target temperature (integer, in device's current unit)."
+  (tuya:set-value (self 1) 2 (int temp)))
+
+(define (ClimateDevice:get-temperature)
+  "Read current room temperature from status.  Returns int or nil."
+  (let (resp (tuya:status (self 1)))
+    (when resp
+      (let (parsed (json-parse resp))
+        (when parsed
+          (let (dps (lookup "dps" parsed))
+            (when dps (lookup "3" dps))))))))
+
+(define (ClimateDevice:set-mode mode)
+  "Set operating mode: \"cold\", \"hot\", \"wind\", or \"auto\"."
+  (tuya:set-value (self 1) 4 mode))
+
+(define (ClimateDevice:set-fan-speed speed)
+  "Set fan speed: \"1\" (low), \"2\" (medium), \"3\" (high)."
+  (tuya:set-value (self 1) 5 speed))
+
+(define (ClimateDevice:set-temp-unit unit)
+  "Set temperature unit: \"c\" or \"f\"."
+  (tuya:set-value (self 1) 19 unit))
+
+(define (ClimateDevice:set-timer minutes)
+  "Set timer in minutes."
+  (tuya:set-value (self 1) 22 (int minutes)))
+
+(define (ClimateDevice:reconnect)
   (tuya-devices:reconnect-device (self 1) (self 4) (self 3)))
 
-(define (LockDevice:status)
+(define (ClimateDevice:status)
   (tuya:status (self 1)))
 
-(define (LockDevice:destroy)
+(define (ClimateDevice:destroy)
   (tuya-devices:destroy-device (self 1)))
 
 
 ;; ====================================================================
-;;  SirenDevice
+;;  DoorbellDevice (video doorbells)
 ;; ====================================================================
+;;
+;; Follows tinytuya Contrib DoorbellDevice.
+;; Note: most battery-powered doorbells stay offline to conserve power
+;; and only connect briefly when the button is pressed or motion is
+;; detected.  This class is most useful for mains-powered doorbells.
 
-(new Class 'SirenDevice)
+(new Class 'DoorbellDevice)
 
-(define (SirenDevice:SirenDevice version ip device-id local-key
-          (dp-switch 104) (dp-volume 5) (dp-duration 7))
-  "Create a siren device.
-   Fields: 0=class, 1=handle, 2=device-id, 3=local-key, 4=ip,
-   5=dp-switch, 6=dp-volume, 7=dp-duration."
+(define (DoorbellDevice:DoorbellDevice version ip device-id local-key)
+  "Create a video doorbell device.
+   Fields: 0=class, 1=handle, 2=device-id, 3=local-key, 4=ip."
   (let (dev (tuya-devices:connect-device version ip device-id local-key))
-    (list SirenDevice dev device-id local-key ip dp-switch dp-volume dp-duration)))
+    (list DoorbellDevice dev device-id local-key ip)))
 
-(define (SirenDevice:turn-on)
-  (tuya:set-value (self 1) (self 5) true))
+(define (DoorbellDevice:set-volume vol)
+  "Set device volume (1-10).  DP 160."
+  (tuya:set-value (self 1) 160 (int vol)))
 
-(define (SirenDevice:turn-off)
-  (tuya:set-value (self 1) (self 5) nil))
+(define (DoorbellDevice:set-motion-switch flag)
+  "Enable or disable motion detection alarm.  DP 134."
+  (tuya:set-value (self 1) 134 (if flag true nil)))
 
-(define (SirenDevice:set-volume vol)
-  "Set siren volume (device-specific scale)."
-  (tuya:set-value (self 1) (self 6) vol))
+(define (DoorbellDevice:set-indicator flag)
+  "Enable or disable status indicator LED.  DP 101."
+  (tuya:set-value (self 1) 101 (if flag true nil)))
 
-(define (SirenDevice:set-duration secs)
-  "Set siren duration in seconds."
-  (tuya:set-value (self 1) (self 7) secs))
+(define (DoorbellDevice:set-motion-sensitivity level)
+  "Set motion sensitivity: \"0\" (low), \"1\" (medium), \"2\" (high).  DP 106."
+  (tuya:set-value (self 1) 106 level))
 
-(define (SirenDevice:reconnect)
+(define (DoorbellDevice:reconnect)
   (tuya-devices:reconnect-device (self 1) (self 4) (self 3)))
 
-(define (SirenDevice:status)
+(define (DoorbellDevice:status)
   (tuya:status (self 1)))
 
-(define (SirenDevice:destroy)
+(define (DoorbellDevice:destroy)
+  (tuya-devices:destroy-device (self 1)))
+
+
+;; ====================================================================
+;;  IRRemoteControlDevice (WiFi IR blaster)
+;; ====================================================================
+;;
+;; Follows tinytuya Contrib IRRemoteControlDevice.
+;; Supports study mode (learn from a real remote) and playback.
+;; Control type 1: older devices using DP 201/202
+;; Control type 2: newer devices using DP 1-13
+;;
+;; IR encoding/decoding (base64, NEC, Pronto, etc.) is left to the
+;; caller -- this class handles the device communication only.
+
+(new Class 'IRRemoteControlDevice)
+
+(define (IRRemoteControlDevice:IRRemoteControlDevice version ip device-id local-key
+          (control-type 2))
+  "Create an IR remote control device.
+   control-type: 1 (older, DP 201/202) or 2 (newer, DP 1-13).
+   Fields: 0=class, 1=handle, 2=device-id, 3=local-key, 4=ip, 5=control-type."
+  (let (dev (tuya-devices:connect-device version ip device-id local-key))
+    (list IRRemoteControlDevice dev device-id local-key ip control-type)))
+
+(define (IRRemoteControlDevice:study-start)
+  "Enter study mode (device listens for IR signals from a real remote)."
+  (if (= (self 5) 1)
+    (tuya:set-value (self 1) 201 "{\"control\":\"study_exit\"}")
+    (tuya:set-value (self 1) 13 "study")))
+
+(define (IRRemoteControlDevice:study-end)
+  "Exit study mode."
+  (if (= (self 5) 1)
+    (tuya:set-value (self 1) 201 "{\"control\":\"study_exit\"}")
+    (tuya:set-value (self 1) 13 "study_exit")))
+
+(define (IRRemoteControlDevice:send-button base64-code)
+  "Send a learned IR code (base64-encoded)."
+  (if (= (self 5) 1)
+    (tuya:set-value (self 1) 201
+      (string "{\"control\":\"send_ir\",\"key1\":\"" base64-code "\"}"))
+    (tuya:set-value (self 1) 7 base64-code)))
+
+(define (IRRemoteControlDevice:send-key head key)
+  "Send an IR head/key pair."
+  (if (= (self 5) 1)
+    (tuya:set-value (self 1) 201
+      (string "{\"control\":\"send_ir\",\"head\":\"" head "\",\"key1\":\"" key "\"}"))
+    (begin
+      (tuya:set-value (self 1) 3 head)
+      (tuya:set-value (self 1) 4 key)
+      (tuya:set-value (self 1) 13 "send"))))
+
+(define (IRRemoteControlDevice:reconnect)
+  (tuya-devices:reconnect-device (self 1) (self 4) (self 3)))
+
+(define (IRRemoteControlDevice:status)
+  (tuya:status (self 1)))
+
+(define (IRRemoteControlDevice:destroy)
+  (tuya-devices:destroy-device (self 1)))
+
+
+;; ====================================================================
+;;  InverterHeatPumpDevice (pool/spa heat pumps)
+;; ====================================================================
+;;
+;; Follows tinytuya Contrib InverterHeatPumpDevice.
+;; DP 1: power (bool)
+;; DP 102: inlet water temp (int)
+;; DP 103: temp unit ("c"/"f")
+;; DP 104: heating capacity percent (int)
+;; DP 105: mode (string)
+;; DP 106: target water temp (int)
+;; DP 107: lower limit target temp (int)
+;; DP 108: upper limit target temp (int)
+;; DP 115: fault code (int)
+;; DP 117: silence mode (bool)
+
+(new Class 'InverterHeatPumpDevice)
+
+(define (InverterHeatPumpDevice:InverterHeatPumpDevice version ip device-id local-key)
+  "Create an inverter heat pump device.
+   Fields: 0=class, 1=handle, 2=device-id, 3=local-key, 4=ip."
+  (let (dev (tuya-devices:connect-device version ip device-id local-key))
+    (list InverterHeatPumpDevice dev device-id local-key ip)))
+
+(define (InverterHeatPumpDevice:turn-on)
+  (tuya:set-value (self 1) 1 true))
+
+(define (InverterHeatPumpDevice:turn-off)
+  (tuya:set-value (self 1) 1 nil))
+
+(define (InverterHeatPumpDevice:set-target-temp temp)
+  "Set target water temperature (integer, in device's current unit)."
+  (tuya:set-value (self 1) 106 (int temp)))
+
+(define (InverterHeatPumpDevice:set-silence-mode flag)
+  "Enable or disable silence mode."
+  (tuya:set-value (self 1) 117 (if flag true nil)))
+
+(define (InverterHeatPumpDevice:set-temp-unit unit)
+  "Set temperature unit: \"c\" or \"f\"."
+  (tuya:set-value (self 1) 103 unit))
+
+(define (InverterHeatPumpDevice:get-inlet-temp)
+  "Read inlet water temperature from status.  Returns int or nil."
+  (let (resp (tuya:status (self 1)))
+    (when resp
+      (let (parsed (json-parse resp))
+        (when parsed
+          (let (dps (lookup "dps" parsed))
+            (when dps (lookup "102" dps))))))))
+
+(define (InverterHeatPumpDevice:reconnect)
+  (tuya-devices:reconnect-device (self 1) (self 4) (self 3)))
+
+(define (InverterHeatPumpDevice:status)
+  (tuya:status (self 1)))
+
+(define (InverterHeatPumpDevice:destroy)
+  (tuya-devices:destroy-device (self 1)))
+
+
+;; ====================================================================
+;;  PresenceDetectorDevice (mmWave presence sensors)
+;; ====================================================================
+;;
+;; Follows tinytuya Contrib PresenceDetectorDevice.
+;; DP 1: presence (bool, read-only)
+;; DP 2: sensitivity (int)
+;; DP 3: near detection distance (int, cm)
+;; DP 4: far detection distance (int, cm)
+;; DP 9: target distance (int, cm, read-only)
+;; DP 101: detection delay (int, seconds)
+;; DP 102: fading time (int, seconds)
+;; DP 104: light sense (int, read-only)
+
+(new Class 'PresenceDetectorDevice)
+
+(define (PresenceDetectorDevice:PresenceDetectorDevice version ip device-id local-key)
+  "Create a presence detector device.
+   Fields: 0=class, 1=handle, 2=device-id, 3=local-key, 4=ip."
+  (let (dev (tuya-devices:connect-device version ip device-id local-key))
+    (list PresenceDetectorDevice dev device-id local-key ip)))
+
+(define (PresenceDetectorDevice:set-sensitivity val)
+  "Set detection sensitivity (int)."
+  (tuya:set-value (self 1) 2 (int val)))
+
+(define (PresenceDetectorDevice:set-near-detection dist)
+  "Set near detection distance in cm."
+  (tuya:set-value (self 1) 3 (int dist)))
+
+(define (PresenceDetectorDevice:set-far-detection dist)
+  "Set far detection distance in cm."
+  (tuya:set-value (self 1) 4 (int dist)))
+
+(define (PresenceDetectorDevice:set-detection-delay secs)
+  "Set detection delay in seconds."
+  (tuya:set-value (self 1) 101 (int secs)))
+
+(define (PresenceDetectorDevice:set-fading-time secs)
+  "Set fading time in seconds."
+  (tuya:set-value (self 1) 102 (int secs)))
+
+(define (PresenceDetectorDevice:reconnect)
+  (tuya-devices:reconnect-device (self 1) (self 4) (self 3)))
+
+(define (PresenceDetectorDevice:status)
+  (tuya:status (self 1)))
+
+(define (PresenceDetectorDevice:destroy)
   (tuya-devices:destroy-device (self 1)))
