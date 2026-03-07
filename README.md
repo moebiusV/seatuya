@@ -186,24 +186,40 @@ The whole point of seatuya is that you do not need to use C.  After
 its functions.  The API uses only C types: pointers to opaque structs,
 char pointers, ints, and enums.  No C++ types cross the ABI boundary.
 
-A minimal FFI session in pseudocode:
+The newLISP wrapper (`seatuya.lsp`) shows what a thin FFI module looks
+like in practice.  Once loaded, controlling a device reads like this:
 
-```
-lib = load("libseatuya.so")
-dev = lib.seatuya_create("3.4")
-lib.seatuya_connect(dev, "192.168.1.100")
-lib.seatuya_negotiate_session(dev, "your_local_key_here")
-buf = allocate(1024)
-n = lib.seatuya_build_message(dev, buf, 10, '{"devId":"...","dps":{"1":true}}', "key")
-lib.seatuya_send(dev, buf, n)
-n = lib.seatuya_receive(dev, buf, 1024, 0)
-response = lib.seatuya_decode_message(dev, buf, n, "key")
-lib.seatuya_destroy(dev)
+```newlisp
+(load "seatuya.lsp")
+
+(setq dev (tuya:create "3.4"))
+(tuya:connect dev "192.168.1.100")
+(tuya:negotiate-session dev local-key)
+
+; turn on switch (data point 1)
+(setq payload (tuya:generate-payload dev tuya:CMD_CONTROL device-id "{\"1\":true}"))
+(setq msg     (tuya:build-message dev tuya:CMD_CONTROL payload local-key))
+(tuya:send dev msg)
+
+; read response
+(setq raw (tuya:receive dev))
+(println (tuya:decode-message dev raw local-key))
+
+(tuya:destroy dev)
 ```
 
-See `seatuya.lsp` for a real-world example of this pattern in newLISP.
+No buffer management, no byte counting, no pointer arithmetic.
+The wrapper handles all of that.  `build-message` allocates and
+returns the right number of bytes; `receive` returns a sized buffer
+or nil; `decode-message` copies the C string and frees the original.
+The constants (`CMD_CONTROL`, `CMD_DP_QUERY`, etc.) are real values
+extracted from the C header, not `#define` macros that had to be
+copied by hand.
+
 The same approach works in Python ctypes, Lua FFI, Ruby FFI, Tcl,
 Zig, Nim, Racket, Janet, or anything else that can call C functions.
+`seatuya.lsp` is 200 lines.  A wrapper in your language of choice
+would be about the same.
 
 ## License
 
