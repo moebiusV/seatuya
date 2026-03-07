@@ -216,6 +216,38 @@ The constants (`CMD_CONTROL`, `CMD_DP_QUERY`, etc.) are real values
 extracted from the C header, not `#define` macros that had to be
 copied by hand.
 
+For comparison, the same thing in C:
+
+```c
+#include <seatuya/seatuya.h>
+#include <stdio.h>
+
+seatuya_device_t *dev = seatuya_create("3.4");
+seatuya_connect(dev, "192.168.1.100");
+seatuya_negotiate_session(dev, local_key);
+
+/* turn on switch (data point 1) */
+char *payload = seatuya_generate_payload(dev,
+    SEATUYA_CMD_CONTROL, device_id, "{\"1\":true}");
+unsigned char buf[SEATUYA_RECOMMENDED_BUFSIZE];
+int n = seatuya_build_message(dev, buf,
+    SEATUYA_CMD_CONTROL, payload, local_key);
+seatuya_free_string(payload);
+seatuya_send(dev, buf, n);
+
+/* read response */
+n = seatuya_receive(dev, buf, sizeof buf, 0);
+char *response = seatuya_decode_message(dev, buf, n, local_key);
+printf("%s\n", response);
+seatuya_free_string(response);
+
+seatuya_destroy(dev);
+```
+
+The C version manages its own buffers and frees returned strings.
+The newLISP wrapper hides all of that.  Either way, the device
+interaction is the same handful of calls.
+
 The same approach works in Python ctypes, Lua FFI, Ruby FFI, Tcl,
 Zig, Nim, Racket, Janet, or anything else that can call C functions.
 `seatuya.lsp` is 200 lines.  A wrapper in your language of choice
