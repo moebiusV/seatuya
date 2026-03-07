@@ -163,7 +163,7 @@ install command for your distribution if it is missing.
 | OpenSSL or LibreSSL | system crypto library |
 | C17 compiler | gcc 8+, clang 6+, MSVC 2019+ |
 | C++14 compiler | for building tuyapp internals |
-| GNU autotools | autoconf, automake, libtool (from git only) |
+| GNU autotools | autoconf, automake, libtool (only when building from a git checkout; release tarballs ship a pre-generated configure) |
 
 **Fetched automatically:**
 
