@@ -65,14 +65,25 @@ library once, and every language gets Tuya for free.
    well, which excludes embedded systems, minimal containers, and
    BSDs where Python packaging is a constant headache.
 
-5. **Self-contained wizard with no cloud SDK.**  tinytuya's wizard
-   requires the requests library, a working Python SSL stack, and a
-   compatible cryptography package (which itself needs Rust to
-   compile from source on some platforms).  seatuya-wizard does
-   HTTPS with libtls or raw OpenSSL BIOs, HMAC-SHA256 with
-   libcrypto, and JSON with a small built-in parser.  Everything the
-   wizard needs is either in the binary or in libc.  No supply
-   chain, no PyPI, no Rust toolchain surprise.
+5. **Self-contained wizard that uses your system's SSL.**  Tuya
+   devices use local encryption keys that are not stored on the
+   device itself -- you have to fetch them from the Tuya Cloud API
+   once, using your developer account credentials.  tinytuya's
+   wizard does this, and so does seatuya-wizard: authenticate, pull
+   your device list with local keys, then UDP-scan your network to
+   match devices to IP addresses.  The difference is what they need
+   installed.  tinytuya depends on the Python `cryptography` package,
+   which is a Rust+C hybrid that wraps the same system OpenSSL you
+   already have, adding a build-time Rust compiler requirement and a
+   separate update cycle managed through pip.  seatuya-wizard links
+   directly against the system's libcrypto and libtls (or libssl) --
+   the same libraries that sshd, curl, and your package manager
+   already depend on.  There is nothing to download, no pip, no
+   wheel compatibility matrix, no Rust toolchain.  If your system
+   can boot and install packages, it already has everything
+   seatuya-wizard needs.  The output is the same `devices.json` and
+   `tinytuya.json` that tinytuya produces, so existing workflows
+   that consume those files keep working.
 
 6. **Predictable, auditable behavior.**  A C library with a manpage, a
    clean header, and no magic.  No monkey-patching, no dynamic
