@@ -29,8 +29,7 @@ library once, and every language gets Tuya for free.
 
 ## Why use seatuya?
 
-tinytuya and tuyapp are excellent libraries -- seatuya is built on
-their work and would not exist without them.  seatuya fills a
+seatuya is built on tuyapp and modeled after tinytuya.  It fills a
 different niche: a C ABI that any language can call.
 
 1. **No runtime dependencies.**  seatuya-wizard is a statically-linked
