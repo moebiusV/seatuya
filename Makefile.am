@@ -4,6 +4,7 @@ ACLOCAL_AMFLAGS = -I m4
 EXTRA_DIST = README COPYING AUTHORS NEWS ChangeLog INSTALL fetch-deps.sh \
 	README.distributions \
 	seatuya.lsp \
+	tuya-devices.lsp \
 	find-lib.lsp \
 	libtls.lsp \
 	crypto-fast.lsp \

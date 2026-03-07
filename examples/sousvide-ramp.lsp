@@ -26,20 +26,27 @@
 ;   -n        dry run — print steps, don't connect
 ;
 
-(load (string (env "SEATUYA_LSP_DIR" (real-path "..")) "/seatuya.lsp"))
+(load (string (env "SEATUYA_LSP_DIR" (real-path "..")) "/tuya-devices.lsp"))
 
 ;; ----------------------------------------------------------------
 ;;  Inkbird sous vide DPS mapping (ISV-100W / ISV-200W)
 ;; ----------------------------------------------------------------
+;;
+;; We use ThermostatDevice with custom DP numbers:
+;;   DP 101: power switch (bool)
+;;   DP 103: target temp (int, Celsius * 10)
+;;   DP 104: current temp (int, Celsius * 10)
+;;   DP 102: status string ("working"/"stopping") -- mapped to mode DP
+;;   temp-scale: 10 (device uses Celsius * 10)
 
-(constant 'DPS_POWER        101)   ; bool: on/off
-(constant 'DPS_STATUS       102)   ; string: "working" / "stopping"
-(constant 'DPS_TARGET_TEMP  103)   ; int: target temp * 10 (Celsius)
-(constant 'DPS_CURRENT_TEMP 104)   ; int: water temp * 10 (Celsius)
-(constant 'DPS_TIMER        105)   ; int: timer duration in minutes
-(constant 'DPS_TIME_LEFT    106)   ; int: remaining minutes
-(constant 'DPS_TEMP_UNIT    108)   ; bool: true=C, false=F
-(constant 'DPS_TEMP_CAL     110)   ; int: calibration offset * 10
+(constant 'DPS_POWER        101)
+(constant 'DPS_STATUS       102)
+(constant 'DPS_TARGET_TEMP  103)
+(constant 'DPS_CURRENT_TEMP 104)
+(constant 'DPS_TIMER        105)
+(constant 'DPS_TIME_LEFT    106)
+(constant 'DPS_TEMP_UNIT    108)
+(constant 'DPS_TEMP_CAL     110)
 
 ;; ----------------------------------------------------------------
 ;;  UDP discovery
@@ -99,7 +106,7 @@
                               devices -1)
                         (println "  found: " (lookup "ip" (last devices))
                                  "  id=" gw-id
-                                 "  v=" (lookup "version" (last devices))))))))))))
+                                 "  v=" (lookup "version" (last devices)))))))))))))
     (net-close sock)
     (println "Scan complete. " (length devices) " device(s) found.")
     devices))
@@ -150,51 +157,22 @@
 (define (f-to-c f)
   (div (mul (sub f 32.0) 5.0) 9.0))
 
-(define (f-to-dps f)
-  "Convert Fahrenheit to Tuya DPS value (Celsius * 10, integer)."
-  (int (round (mul (f-to-c f) 10.0) 0)))
-
 ;; ----------------------------------------------------------------
-;;  Device communication
+;;  Inkbird convenience wrappers
 ;; ----------------------------------------------------------------
 
-(define (send-command dev device-id local-key dps-json cmd)
-  (let (payload (tuya:generate-payload dev cmd device-id dps-json))
-    (unless payload
-      (println "  error: failed to generate payload")
-      (throw -1))
-    (let (msg (tuya:build-message dev cmd payload local-key))
-      (unless msg
-        (println "  error: failed to build message")
-        (throw -1))
-      (let (n (tuya:send dev msg))
-        (when (< n 0)
-          (println "  error: send failed")
-          (throw -1))
-        (sleep 200)
-        (let (raw (tuya:receive dev))
-          (when raw
-            (let (response (tuya:decode-message dev raw local-key))
-              (when response
-                (println "  response: " response)))))
-        0))))
-
-(define (set-temperature-f dev device-id local-key temp-f)
-  (let (dps-val (f-to-dps temp-f))
-    (println (format "  set target: %.1f F (DPS %d = %d)" temp-f DPS_TARGET_TEMP dps-val))
-    (send-command dev device-id local-key
-                  (format "{\"%d\":%d}" DPS_TARGET_TEMP dps-val)
-                  tuya:CMD_CONTROL)))
-
-(define (power-on dev device-id local-key)
+(define (power-on sv)
   (println "  powering on")
-  (send-command dev device-id local-key
-                (format "{\"%d\":true}" DPS_POWER)
-                tuya:CMD_CONTROL))
+  (:turn-on sv))
 
-(define (query-status dev device-id local-key)
+(define (set-temperature-f sv temp-f)
+  (println (format "  set target: %.1f F (%.1f C)" temp-f (f-to-c temp-f)))
+  (:set-temperature sv (f-to-c temp-f)))
+
+(define (query-status sv)
   (println "  querying status")
-  (send-command dev device-id local-key nil tuya:CMD_DP_QUERY))
+  (let (resp (:status sv))
+    (when resp (println "  response: " resp))))
 
 ;; ----------------------------------------------------------------
 ;;  Argument parsing
@@ -277,8 +255,8 @@
         (println "\n[dry run]")
         (for (i 0 steps)
           (let (temp (min end-f (add start-f (mul step-f i))))
-            (println (format "  t=%3d min  target=%.1f F  (DPS %d = %d)"
-                             i temp DPS_TARGET_TEMP (f-to-dps temp)))))
+            (println (format "  t=%3d min  target=%.1f F  (%.1f C)"
+                             i temp (f-to-c temp)))))
         (exit 0))
 
       ;; Read config
@@ -290,34 +268,15 @@
 
         (println (format "device: %s @ %s (protocol %s)" device-id ip version))
 
-        ;; Create device handle
-        (let (dev (tuya:create version))
-          (unless dev
-            (println "error: unsupported protocol version: " version)
-            (exit 1))
+        ;; Create ThermostatDevice with Inkbird DP mapping:
+        ;;   dp-switch=101, dp-target=103, dp-current=104, dp-mode=102, temp-scale=10
+        (let (sv (ThermostatDevice version ip device-id local-key
+                   DPS_POWER DPS_TARGET_TEMP DPS_CURRENT_TEMP DPS_STATUS 10))
 
-          ;; Connect
-          (println "connecting to " ip "...")
-          (unless (tuya:connect dev ip)
-            (println (format "error: connection failed (errno %d)" (tuya:get-last-error dev)))
-            (tuya:destroy dev)
-            (exit 1))
-
-          ;; Session negotiation (needed for protocol 3.4+)
-          (when (>= (tuya:get-protocol dev) tuya:PROTO_V34)
-            (println "negotiating session...")
-            (unless (tuya:negotiate-session dev local-key)
-              (println "error: session negotiation failed")
-              (tuya:disconnect dev)
-              (tuya:destroy dev)
-              (exit 1)))
-
-          ;; Query current status
-          (query-status dev device-id local-key)
-
-          ;; Power on and set initial temperature
-          (power-on dev device-id local-key)
-          (set-temperature-f dev device-id local-key start-f)
+          ;; Query current status, power on, set initial temperature
+          (query-status sv)
+          (power-on sv)
+          (set-temperature-f sv start-f)
 
           ;; Ramp loop: one adjustment per minute
           (for (i 1 steps)
@@ -326,19 +285,18 @@
               (sleep 60000)
 
               ;; Reconnect if connection dropped
-              (unless (tuya:is-connected dev)
+              (unless (tuya:is-connected (sv 1))
                 (println "  reconnecting...")
-                (tuya:connect dev ip)
-                (when (>= (tuya:get-protocol dev) tuya:PROTO_V34)
-                  (tuya:negotiate-session dev local-key)))
+                (tuya:connect (sv 1) ip)
+                (when (>= (tuya:get-protocol (sv 1)) tuya:PROTO_V34)
+                  (tuya:negotiate-session (sv 1) local-key)))
 
-              (set-temperature-f dev device-id local-key temp)))
+              (set-temperature-f sv temp)))
 
-          (println (format "\nramp complete — holding at %.1f F" end-f))
+          (println (format "\nramp complete -- holding at %.1f F" end-f))
 
           ;; Clean up
-          (tuya:disconnect dev)
-          (tuya:destroy dev))))))
+          (:destroy sv))))))
 
 (main)
 (exit)

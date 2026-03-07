@@ -113,6 +113,7 @@ library once, and every language gets Tuya for free.
 | `crypto-fast.lsp` | complete libcrypto FFI wrapper (replaces the built-in crypto.lsp with native calls, caller-owned buffers, SHA3, HMAC, PBKDF2, CSPRNG) |
 | `libtls.lsp` | libtls FFI wrapper for HTTPS |
 | `seatuya.lsp` | newLISP bindings for libseatuya |
+| `tuya-devices.lsp` | FOOP device classes (OutletDevice, BulbDevice, CoverDevice, ThermostatDevice, FanDevice, LockDevice, SirenDevice) |
 
 **Example programs (C):**
 
@@ -252,6 +253,109 @@ The same approach works in Python ctypes, Lua FFI, Ruby FFI, Tcl,
 Zig, Nim, Racket, Janet, or anything else that can call C functions.
 `seatuya.lsp` is 200 lines.  A wrapper in your language of choice
 would be about the same.
+
+### Convenience functions
+
+The five-step round-trip (generate payload, build message, send,
+receive, decode) can be collapsed into one call.  Store credentials
+once with `tuya:set-credentials`, then use `tuya:set-value` and
+`tuya:status`:
+
+```newlisp
+(tuya:set-credentials dev device-id local-key)
+
+(tuya:set-value dev 1 true)       ; turn on DP 1
+(tuya:set-value dev 3 "colour")   ; set DP 3 to a string
+(tuya:set-value dev 103 720)      ; set DP 103 to integer 720
+(tuya:status dev)                  ; query all DPs
+```
+
+Values are automatically formatted as the correct JSON type (boolean,
+string, integer, or float) based on the newLISP value passed.  These
+functions are the building blocks for the FOOP device classes below.
+
+## Device classes (newLISP FOOP)
+
+`tuya-devices.lsp` provides high-level device classes using newLISP's FOOP
+(Functional Object-Oriented Programming) system.  Each class maps
+tinytuya's convenience methods to the correct data point numbers, so you
+write `(:turn-on plug)` instead of raw `set-value` calls.
+
+### Supported device types
+
+| Class | Devices | Key methods |
+|-------|---------|-------------|
+| `OutletDevice` | smart plugs, power strips, wall switches | `:turn-on`, `:turn-off`, `:set-dimmer` |
+| `BulbDevice` | RGB/RGBW smart bulbs (type A and B) | `:set-colour`, `:set-brightness-pct`, `:set-colourtemp-pct`, `:set-white` |
+| `CoverDevice` | blinds, curtains, garage doors (8 command variants) | `:open-cover`, `:close-cover`, `:stop-cover`, `:set-position` |
+| `ThermostatDevice` | thermostats, HVAC controllers | `:set-temperature`, `:set-mode`, `:get-temperature` |
+| `FanDevice` | fans, air purifiers | `:set-speed`, `:set-oscillation` |
+| `LockDevice` | smart locks | `:lock`, `:unlock` |
+| `SirenDevice` | sirens, alarms | `:set-volume`, `:set-duration` |
+
+All classes also support `:status` (query all DPs) and `:destroy`
+(disconnect and free the handle).
+
+### Example: smart plug
+
+```newlisp
+(load "tuya-devices.lsp")
+
+(setq plug (OutletDevice "3.3" "192.168.1.50" "device-id" "local-key"))
+(:turn-on plug)
+(:status plug)
+(:turn-off plug)
+(:destroy plug)
+```
+
+### Example: RGB bulb
+
+```newlisp
+(setq bulb (BulbDevice "3.4" "192.168.1.51" "device-id" "local-key"))
+(:turn-on bulb)
+(:set-colour bulb 255 0 0)      ; red
+(:set-brightness-pct bulb 50)   ; half brightness
+(:set-white bulb 500 500)       ; white mode, mid brightness + temp
+(:destroy bulb)
+```
+
+### Example: thermostat with custom DP map
+
+```newlisp
+;; Default DPs: 1=switch, 2=target, 3=current, 4=mode, scale=10
+;; Override for a device that uses different DP numbers:
+(setq therm (ThermostatDevice "3.3" "192.168.1.52" "dev-id" "key"
+              2 16 24 4 1))     ; switch=2, target=16, current=24, mode=4, scale=1
+(:set-temperature therm 72)
+(:get-temperature therm)        ; reads current temp from device
+(:destroy therm)
+```
+
+### Example: Inkbird sous vide (custom DP map)
+
+The `sousvide-ramp.lsp` example uses `ThermostatDevice` with Inkbird's
+non-standard DP numbers (101-110 instead of the usual 1-4):
+
+```newlisp
+(setq sv (ThermostatDevice version ip device-id local-key
+           101 103 104 102 10))   ; power=101, target=103, current=104, status=102, scale=10
+(power-on sv)                     ; wrapper around (:turn-on sv)
+(set-temperature-f sv 145.0)      ; wrapper: F->C conversion, then (:set-temperature sv celsius)
+(query-status sv)                 ; wrapper around (:status sv)
+(:destroy sv)
+```
+
+The named wrappers (`power-on`, `set-temperature-f`, `query-status`)
+are application-level functions that call the FOOP methods, which call
+`tuya:set-value`, which calls the raw FFI.  Each layer hides the right
+details: the FOOP class hides DP numbers, the convenience functions
+hide temperature conversion, the FFI wrapper hides buffers.
+
+### DP number customization
+
+Every constructor accepts optional DP number overrides for devices that
+use non-standard mappings.  The defaults match the most common Tuya
+device configurations, as documented by tinytuya.
 
 ## License
 

@@ -206,4 +206,72 @@
         n   (seatuya_receive dev buf maxsize minsize))
     (if (> n 0) (slice buf 0 n) nil)))
 
+;; ---- credential store ----
+;; Maps handle -> (device-id local-key) for high-level functions.
+
+(setq credentials '())
+
+(define (set-credentials dev device-id local-key)
+  "Store device-id and local-key for a handle, used by set-value and status."
+  (if (assoc dev credentials)
+    (setf (assoc dev credentials) (list dev device-id local-key))
+    (push (list dev device-id local-key) credentials))
+  true)
+
+(define (get-credentials dev)
+  "Return (device-id local-key) for a handle, or nil."
+  (let (entry (assoc dev credentials))
+    (when entry (rest entry))))
+
+(define (clear-credentials dev)
+  "Remove stored credentials for a handle."
+  (setq credentials (clean (fn (e) (= (first e) dev)) credentials))
+  true)
+
+;; ---- high-level convenience functions ----
+
+(define (set-value dev dp value)
+  "Set a single data point on the device.  Full round-trip: generate payload,
+   build message, send, receive, decode.  Returns decoded response or nil."
+  (let (creds (get-credentials dev))
+    (unless creds
+      (throw "tuya:set-value -- no credentials stored (call set-credentials first)"))
+    (let (device-id (creds 0)
+          local-key (creds 1)
+          ;; Format the DPS JSON depending on value type
+          dps-json  (cond
+                      ((= value true)  (format "{\"%d\":true}" dp))
+                      ((= value nil)   (format "{\"%d\":false}" dp))
+                      ((string? value) (format "{\"%d\":\"%s\"}" dp value))
+                      ((float? value)  (format "{\"%d\":%g}" dp (float value)))
+                      (true            (format "{\"%d\":%d}" dp (int value))))
+          payload   (generate-payload dev CMD_CONTROL device-id dps-json))
+      (unless payload (throw "tuya:set-value -- failed to generate payload"))
+      (let (msg (build-message dev CMD_CONTROL payload local-key))
+        (unless msg (throw "tuya:set-value -- failed to build message"))
+        (let (n (send dev msg))
+          (when (< n 0) (throw "tuya:set-value -- send failed"))
+          (sleep 200)
+          (let (raw (receive dev))
+            (when raw
+              (decode-message dev raw local-key))))))))
+
+(define (status dev)
+  "Query all data points from the device.  Returns decoded response or nil."
+  (let (creds (get-credentials dev))
+    (unless creds
+      (throw "tuya:status -- no credentials stored (call set-credentials first)"))
+    (let (device-id (creds 0)
+          local-key (creds 1)
+          payload   (generate-payload dev CMD_DP_QUERY device-id ""))
+      (unless payload (throw "tuya:status -- failed to generate payload"))
+      (let (msg (build-message dev CMD_DP_QUERY payload local-key))
+        (unless msg (throw "tuya:status -- failed to build message"))
+        (let (n (send dev msg))
+          (when (< n 0) (throw "tuya:status -- send failed"))
+          (sleep 200)
+          (let (raw (receive dev))
+            (when raw
+              (decode-message dev raw local-key))))))))
+
 (context MAIN)

@@ -180,6 +180,76 @@ The newLISP bindings shipped with seatuya (seatuya.lsp) demonstrate
 this: a 200-line module wraps the entire C API, and the example
 programs (seatuya-wizard.lsp, sousvide-ramp.lsp) use it to control
 real hardware without writing any C.
+.SS newLISP convenience layer
+.B seatuya.lsp
+also provides high-level functions that collapse the five-step
+send/receive round-trip into a single call.
+Store credentials once with
+.BR tuya:set-credentials ,
+then use
+.BR tuya:set-value
+and
+.BR tuya:status
+without passing device-id and local-key on every call:
+.PP
+.RS
+.nf
+(load "seatuya.lsp")
+(setq dev (tuya:create "3.3"))
+(tuya:connect dev "192.168.1.50")
+(tuya:set-credentials dev device-id local-key)
+(tuya:set-value dev 1 true)     ; turn on DP 1
+(tuya:status dev)                ; query all DPs
+(tuya:destroy dev)
+.fi
+.RE
+.SS newLISP FOOP device classes
+.B tuya-devices.lsp
+provides device-class convenience functions using newLISP FOOP
+(Functional Object-Oriented Programming), mirroring the device
+classes in tinytuya.
+Each class maps named methods to the correct data point numbers
+for that device category:
+.PP
+.RS
+.nf
+(load "tuya-devices.lsp")
+
+; Smart plug
+(setq plug (OutletDevice "3.3" "192.168.1.50" dev-id key))
+(:turn-on plug)
+(:turn-off plug)
+(:destroy plug)
+
+; RGB bulb (type B)
+(setq bulb (BulbDevice "3.4" "192.168.1.51" dev-id key))
+(:set-colour bulb 255 0 0)
+(:set-brightness-pct bulb 50)
+(:destroy bulb)
+.fi
+.RE
+.PP
+Available classes:
+.BR OutletDevice
+(smart plugs, power strips),
+.BR BulbDevice
+(RGB/RGBW bulbs, type A and B DP layouts),
+.BR CoverDevice
+(blinds, curtains, garage doors -- 8 command variants),
+.BR ThermostatDevice
+(thermostats, HVAC -- configurable DP map),
+.BR FanDevice
+(fans, air purifiers),
+.BR LockDevice ,
+and
+.BR SirenDevice .
+All classes support
+.B :status
+(query DPs) and
+.B :destroy
+(disconnect and free).
+Constructor arguments allow overriding default DP numbers
+for devices with non-standard mappings.
 .SH CONSTANTS
 .TP
 .B SEATUYA_DEFAULT_PORT

@@ -1,5 +1,5 @@
 /*
- * sousvide-ramp — Ramp an Inkbird sous vide from one temperature to another.
+ * sousvide-ramp -- Ramp an Inkbird sous vide from one temperature to another.
  *
  * Usage:
  *   sousvide-ramp [options]
@@ -21,7 +21,7 @@
  *   -e TEMP   end temperature in Fahrenheit    (default: 145)
  *   -t MINS   ramp duration in minutes         (default: 45)
  *   -c FILE   config file path                 (default: ~/.seatuyarc)
- *   -n        dry run — print steps, don't connect
+ *   -n        dry run -- print steps, don't connect
  *
  * Copyright (c) 2026, David Walther <david@clearbrookdistillery.com>
  * BSD-2-Clause
@@ -55,25 +55,30 @@ enum inkbird_dps {
 enum { MAX_BUF = 1024 };
 
 /* ------------------------------------------------------------------ */
-/*  Config file reader                                                */
+/*  Device handle + credentials bundle                                */
 /* ------------------------------------------------------------------ */
 
-struct sousvide_config {
+struct tuya_dev {
+	seatuya_device_t *handle;
 	char device_id[128];
 	char local_key[128];
 	char ip[256];
 	char version[8];
 };
 
+/* ------------------------------------------------------------------ */
+/*  Config file reader                                                */
+/* ------------------------------------------------------------------ */
+
 static int
-read_config(const char *path, struct sousvide_config *cfg)
+read_config(const char *path, struct tuya_dev *dev)
 {
 	FILE *fp;
 	char line[512];
 	int in_section = 0;
 
-	memset(cfg, 0, sizeof(*cfg));
-	strncpy(cfg->version, "3.3", sizeof(cfg->version) - 1);
+	memset(dev, 0, sizeof(*dev));
+	strncpy(dev->version, "3.3", sizeof(dev->version) - 1);
 
 	fp = fopen(path, "r");
 	if (!fp) {
@@ -116,24 +121,181 @@ read_config(const char *path, struct sousvide_config *cfg)
 		while (*val == ' ' || *val == '\t') val++;
 
 		if (strcmp(key, "device_id") == 0)
-			strncpy(cfg->device_id, val, sizeof(cfg->device_id) - 1);
+			strncpy(dev->device_id, val, sizeof(dev->device_id) - 1);
 		else if (strcmp(key, "local_key") == 0)
-			strncpy(cfg->local_key, val, sizeof(cfg->local_key) - 1);
+			strncpy(dev->local_key, val, sizeof(dev->local_key) - 1);
 		else if (strcmp(key, "ip") == 0)
-			strncpy(cfg->ip, val, sizeof(cfg->ip) - 1);
+			strncpy(dev->ip, val, sizeof(dev->ip) - 1);
 		else if (strcmp(key, "version") == 0)
-			strncpy(cfg->version, val, sizeof(cfg->version) - 1);
+			strncpy(dev->version, val, sizeof(dev->version) - 1);
 	}
 
 	fclose(fp);
 
-	if (!cfg->device_id[0] || !cfg->local_key[0] || !cfg->ip[0]) {
+	if (!dev->device_id[0] || !dev->local_key[0] || !dev->ip[0]) {
 		fprintf(stderr,
 		    "error: missing device_id, local_key, or ip in [sousvide] section of %s\n",
 		    path);
 		return -1;
 	}
 
+	return 0;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Connect + negotiate                                               */
+/* ------------------------------------------------------------------ */
+
+static int
+tuya_dev_connect(struct tuya_dev *dev)
+{
+	dev->handle = seatuya_create(dev->version);
+	if (!dev->handle) {
+		fprintf(stderr, "error: unsupported protocol version: %s\n",
+		    dev->version);
+		return -1;
+	}
+
+	printf("connecting to %s...\n", dev->ip);
+	if (!seatuya_connect(dev->handle, dev->ip)) {
+		fprintf(stderr, "error: connection failed (errno %d)\n",
+		    seatuya_get_last_error(dev->handle));
+		seatuya_destroy(dev->handle);
+		dev->handle = NULL;
+		return -1;
+	}
+
+	if (seatuya_get_protocol(dev->handle) >= SEATUYA_PROTO_V34) {
+		printf("negotiating session...\n");
+		if (!seatuya_negotiate_session(dev->handle, dev->local_key)) {
+			fprintf(stderr, "error: session negotiation failed\n");
+			seatuya_disconnect(dev->handle);
+			seatuya_destroy(dev->handle);
+			dev->handle = NULL;
+			return -1;
+		}
+	}
+
+	return 0;
+}
+
+static void
+tuya_dev_reconnect(struct tuya_dev *dev)
+{
+	if (seatuya_is_connected(dev->handle))
+		return;
+	printf("  reconnecting...\n");
+	seatuya_connect(dev->handle, dev->ip);
+	if (seatuya_get_protocol(dev->handle) >= SEATUYA_PROTO_V34)
+		seatuya_negotiate_session(dev->handle, dev->local_key);
+}
+
+static void
+tuya_dev_destroy(struct tuya_dev *dev)
+{
+	if (!dev->handle) return;
+	seatuya_disconnect(dev->handle);
+	seatuya_destroy(dev->handle);
+	dev->handle = NULL;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Generic set-value and status query                                */
+/* ------------------------------------------------------------------ */
+
+static int
+set_value_bool(struct tuya_dev *dev, int dp, bool val)
+{
+	char dps[64];
+	unsigned char buf[MAX_BUF];
+
+	snprintf(dps, sizeof(dps), "{\"%d\":%s}", dp, val ? "true" : "false");
+
+	char *payload = seatuya_generate_payload(dev->handle,
+	    SEATUYA_CMD_CONTROL, dev->device_id, dps);
+	if (!payload) return -1;
+
+	int len = seatuya_build_message(dev->handle, buf,
+	    SEATUYA_CMD_CONTROL, payload, dev->local_key);
+	seatuya_free_string(payload);
+	if (len < 0) return -1;
+
+	int n = seatuya_send(dev->handle, buf, len);
+	if (n < 0) return -1;
+
+	usleep(200000);
+	n = seatuya_receive(dev->handle, buf, MAX_BUF - 1, 0);
+	if (n > 0) {
+		char *resp = seatuya_decode_message(dev->handle, buf, n,
+		    dev->local_key);
+		if (resp) {
+			printf("  response: %s\n", resp);
+			seatuya_free_string(resp);
+		}
+	}
+	return 0;
+}
+
+static int
+set_value_int(struct tuya_dev *dev, int dp, int val)
+{
+	char dps[64];
+	unsigned char buf[MAX_BUF];
+
+	snprintf(dps, sizeof(dps), "{\"%d\":%d}", dp, val);
+
+	char *payload = seatuya_generate_payload(dev->handle,
+	    SEATUYA_CMD_CONTROL, dev->device_id, dps);
+	if (!payload) return -1;
+
+	int len = seatuya_build_message(dev->handle, buf,
+	    SEATUYA_CMD_CONTROL, payload, dev->local_key);
+	seatuya_free_string(payload);
+	if (len < 0) return -1;
+
+	int n = seatuya_send(dev->handle, buf, len);
+	if (n < 0) return -1;
+
+	usleep(200000);
+	n = seatuya_receive(dev->handle, buf, MAX_BUF - 1, 0);
+	if (n > 0) {
+		char *resp = seatuya_decode_message(dev->handle, buf, n,
+		    dev->local_key);
+		if (resp) {
+			printf("  response: %s\n", resp);
+			seatuya_free_string(resp);
+		}
+	}
+	return 0;
+}
+
+static int
+query_status(struct tuya_dev *dev)
+{
+	unsigned char buf[MAX_BUF];
+
+	char *payload = seatuya_generate_payload(dev->handle,
+	    SEATUYA_CMD_DP_QUERY, dev->device_id, "");
+	if (!payload) return -1;
+
+	int len = seatuya_build_message(dev->handle, buf,
+	    SEATUYA_CMD_DP_QUERY, payload, dev->local_key);
+	seatuya_free_string(payload);
+	if (len < 0) return -1;
+
+	int n = seatuya_send(dev->handle, buf, len);
+	if (n < 0) return -1;
+
+	usleep(200000);
+	n = seatuya_receive(dev->handle, buf, MAX_BUF - 1, 0);
+	if (n > 0) {
+		char *resp = seatuya_decode_message(dev->handle, buf, n,
+		    dev->local_key);
+		if (resp) {
+			printf("  response: %s\n", resp);
+			seatuya_free_string(resp);
+		}
+	}
 	return 0;
 }
 
@@ -155,85 +317,21 @@ f_to_dps(double f)
 }
 
 /* ------------------------------------------------------------------ */
-/*  Device communication                                              */
+/*  Inkbird convenience wrappers                                      */
 /* ------------------------------------------------------------------ */
 
 static int
-send_command(seatuya_device_t *dev, const char *device_id,
-             const char *local_key, const char *dps_json,
-             enum seatuya_command cmd)
+power_on(struct tuya_dev *dev)
 {
-	unsigned char buf[MAX_BUF];
-	char *payload;
-	int len, n;
-	char *response;
-
-	payload = seatuya_generate_payload(dev, cmd, device_id, dps_json);
-	if (!payload) {
-		fprintf(stderr, "error: failed to generate payload\n");
-		return -1;
-	}
-
-	len = seatuya_build_message(dev, buf, cmd, payload, local_key);
-	seatuya_free_string(payload);
-	if (len < 0) {
-		fprintf(stderr, "error: failed to build message\n");
-		return -1;
-	}
-
-	n = seatuya_send(dev, buf, len);
-	if (n < 0) {
-		fprintf(stderr, "error: send failed\n");
-		return -1;
-	}
-
-	usleep(200000);
-
-	n = seatuya_receive(dev, buf, MAX_BUF - 1, 0);
-	if (n > 0) {
-		response = seatuya_decode_message(dev, buf, n, local_key);
-		if (response) {
-			printf("  response: %s\n", response);
-			seatuya_free_string(response);
-		}
-	}
-
-	return 0;
-}
-
-static int
-set_temperature_f(seatuya_device_t *dev, const char *device_id,
-                  const char *local_key, double temp_f)
-{
-	char dps[64];
-	int dps_val = f_to_dps(temp_f);
-
-	printf("  set target: %.1f F (DPS %d = %d)\n",
-	    temp_f, DPS_TARGET_TEMP, dps_val);
-
-	snprintf(dps, sizeof(dps), "{\"%d\":%d}", DPS_TARGET_TEMP, dps_val);
-	return send_command(dev, device_id, local_key, dps,
-	    SEATUYA_CMD_CONTROL);
-}
-
-static int
-power_on(seatuya_device_t *dev, const char *device_id,
-         const char *local_key)
-{
-	char dps[64];
 	printf("  powering on\n");
-	snprintf(dps, sizeof(dps), "{\"%d\":true}", DPS_POWER);
-	return send_command(dev, device_id, local_key, dps,
-	    SEATUYA_CMD_CONTROL);
+	return set_value_bool(dev, DPS_POWER, true);
 }
 
 static int
-query_status(seatuya_device_t *dev, const char *device_id,
-             const char *local_key)
+set_temperature_f(struct tuya_dev *dev, double temp_f)
 {
-	printf("  querying status\n");
-	return send_command(dev, device_id, local_key, NULL,
-	    SEATUYA_CMD_DP_QUERY);
+	printf("  set target: %.1f F (%.1f C)\n", temp_f, f_to_c(temp_f));
+	return set_value_int(dev, DPS_TARGET_TEMP, f_to_dps(temp_f));
 }
 
 /* ------------------------------------------------------------------ */
@@ -313,54 +411,31 @@ main(int argc, char *argv[])
 		for (int i = 0; i <= steps; i++) {
 			double temp = start_f + step_f * i;
 			if (temp > end_f) temp = end_f;
-			printf("  t=%3d min  target=%.1f F  (DPS %d = %d)\n",
-			    i, temp, DPS_TARGET_TEMP, f_to_dps(temp));
+			printf("  t=%3d min  target=%.1f F  (%.1f C)\n",
+			    i, temp, f_to_c(temp));
 		}
 		return 0;
 	}
 
-	/* Read config */
-	struct sousvide_config cfg;
-	if (read_config(config_path, &cfg) != 0)
+	/* Read config into device bundle */
+	struct tuya_dev dev;
+	if (read_config(config_path, &dev) != 0)
 		return 1;
 
 	printf("device: %s @ %s (protocol %s)\n",
-	    cfg.device_id, cfg.ip, cfg.version);
+	    dev.device_id, dev.ip, dev.version);
 
-	/* Create device handle */
-	seatuya_device_t *dev = seatuya_create(cfg.version);
-	if (!dev) {
-		fprintf(stderr, "error: unsupported protocol version: %s\n",
-		    cfg.version);
+	/* Connect + negotiate */
+	if (tuya_dev_connect(&dev) != 0)
 		return 1;
-	}
-
-	/* Connect */
-	printf("connecting to %s...\n", cfg.ip);
-	if (!seatuya_connect(dev, cfg.ip)) {
-		fprintf(stderr, "error: connection failed (errno %d)\n",
-		    seatuya_get_last_error(dev));
-		seatuya_destroy(dev);
-		return 1;
-	}
-
-	/* Session negotiation (needed for protocol 3.4+) */
-	if (seatuya_get_protocol(dev) >= SEATUYA_PROTO_V34) {
-		printf("negotiating session...\n");
-		if (!seatuya_negotiate_session(dev, cfg.local_key)) {
-			fprintf(stderr, "error: session negotiation failed\n");
-			seatuya_disconnect(dev);
-			seatuya_destroy(dev);
-			return 1;
-		}
-	}
 
 	/* Query current status */
-	query_status(dev, cfg.device_id, cfg.local_key);
+	printf("  querying status\n");
+	query_status(&dev);
 
 	/* Power on and set initial temperature */
-	power_on(dev, cfg.device_id, cfg.local_key);
-	set_temperature_f(dev, cfg.device_id, cfg.local_key, start_f);
+	power_on(&dev);
+	set_temperature_f(&dev, start_f);
 
 	/* Ramp loop: one adjustment per minute */
 	for (int i = 1; i <= steps; i++) {
@@ -370,22 +445,13 @@ main(int argc, char *argv[])
 		printf("[%3d/%d min] ", i, steps);
 		sleep(60);
 
-		/* Reconnect if connection dropped */
-		if (!seatuya_is_connected(dev)) {
-			printf("  reconnecting...\n");
-			seatuya_connect(dev, cfg.ip);
-			if (seatuya_get_protocol(dev) >= SEATUYA_PROTO_V34)
-				seatuya_negotiate_session(dev, cfg.local_key);
-		}
+		tuya_dev_reconnect(&dev);
 
-		set_temperature_f(dev, cfg.device_id, cfg.local_key, temp);
+		set_temperature_f(&dev, temp);
 	}
 
-	printf("\nramp complete — holding at %.1f F\n", end_f);
+	printf("\nramp complete -- holding at %.1f F\n", end_f);
 
-	/* Clean up */
-	seatuya_disconnect(dev);
-	seatuya_destroy(dev);
-
+	tuya_dev_destroy(&dev);
 	return 0;
 }
