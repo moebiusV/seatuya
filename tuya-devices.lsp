@@ -10,6 +10,10 @@
 ;   (:turn-on plug)
 ;   (:status plug)
 ;   (:destroy plug)
+;
+; All classes share a common field prefix:
+;   0=class  1=handle  2=device-id  3=local-key  4=ip
+; Class-specific fields start at index 5.
 
 (load (string (env "SEATUYA_LSP_DIR" (real-path ".")) "/seatuya.lsp"))
 
@@ -32,6 +36,16 @@
         (throw "session negotiation failed")))
     (tuya:set-credentials dev device-id local-key)
     dev))
+
+(define (tuya-devices:reconnect-device dev ip local-key)
+  "Reconnect if the connection has dropped.  Re-negotiates session
+   for protocol 3.4+.  Returns true if connected, nil on failure."
+  (if (tuya:is-connected dev) true
+    (begin
+      (tuya:connect dev ip)
+      (when (>= (tuya:get-protocol dev) tuya:PROTO_V34)
+        (tuya:negotiate-session dev local-key))
+      (tuya:is-connected dev))))
 
 (define (tuya-devices:destroy-device dev)
   "Disconnect, clear credentials, destroy handle."
@@ -83,9 +97,10 @@
 (new Class 'OutletDevice)
 
 (define (OutletDevice:OutletDevice version ip device-id local-key)
-  "Create an outlet device.  Fields: 0=class, 1=handle, 2=device-id, 3=local-key."
+  "Create an outlet device.
+   Fields: 0=class, 1=handle, 2=device-id, 3=local-key, 4=ip."
   (let (dev (tuya-devices:connect-device version ip device-id local-key))
-    (list OutletDevice dev device-id local-key)))
+    (list OutletDevice dev device-id local-key ip)))
 
 (define (OutletDevice:turn-on (switch 1))
   "Turn on the outlet (or a specific switch number for multi-switch devices)."
@@ -98,6 +113,10 @@
 (define (OutletDevice:set-dimmer pct)
   "Set dimmer level.  pct is 0-100, mapped to device range 25-255 on DP 3."
   (tuya:set-value (self 1) 3 (tuya-devices:pct-scale pct 25 255)))
+
+(define (OutletDevice:reconnect)
+  "Reconnect if the connection has dropped."
+  (tuya-devices:reconnect-device (self 1) (self 4) (self 3)))
 
 (define (OutletDevice:status)
   "Query all data points."
@@ -122,67 +141,70 @@
 
 (define (BulbDevice:BulbDevice version ip device-id local-key (bulb-type "B"))
   "Create a bulb device.  bulb-type: \"A\" (legacy) or \"B\" (default).
-   Fields: 0=class, 1=handle, 2=device-id, 3=local-key, 4=bulb-type,
-   5=dp-switch, 6=dp-mode, 7=dp-brightness, 8=dp-colourtemp, 9=dp-colour."
+   Fields: 0=class, 1=handle, 2=device-id, 3=local-key, 4=ip, 5=bulb-type,
+   6=dp-switch, 7=dp-mode, 8=dp-brightness, 9=dp-colourtemp, 10=dp-colour."
   (let (dev (tuya-devices:connect-device version ip device-id local-key))
     (if (= bulb-type "A")
-      (list BulbDevice dev device-id local-key "A" 1 2 3 4 5)
-      (list BulbDevice dev device-id local-key "B" 20 21 22 23 24))))
+      (list BulbDevice dev device-id local-key ip "A" 1 2 3 4 5)
+      (list BulbDevice dev device-id local-key ip "B" 20 21 22 23 24))))
 
 (define (BulbDevice:turn-on)
-  (tuya:set-value (self 1) (self 5) true))
+  (tuya:set-value (self 1) (self 6) true))
 
 (define (BulbDevice:turn-off)
-  (tuya:set-value (self 1) (self 5) nil))
+  (tuya:set-value (self 1) (self 6) nil))
 
 (define (BulbDevice:set-mode mode)
   "Set mode: \"white\", \"colour\", \"scene\", or \"music\"."
-  (tuya:set-value (self 1) (self 6) mode))
+  (tuya:set-value (self 1) (self 7) mode))
 
 (define (BulbDevice:set-brightness val)
   "Set raw brightness value.  Type B: 10-1000, type A: 25-255."
-  (tuya:set-value (self 1) (self 7) val))
+  (tuya:set-value (self 1) (self 8) val))
 
 (define (BulbDevice:set-brightness-pct pct)
   "Set brightness as a percentage (0-100)."
-  (if (= (self 4) "A")
-    (tuya:set-value (self 1) (self 7) (tuya-devices:pct-scale pct 25 255))
-    (tuya:set-value (self 1) (self 7) (tuya-devices:pct-scale pct 10 1000))))
+  (if (= (self 5) "A")
+    (tuya:set-value (self 1) (self 8) (tuya-devices:pct-scale pct 25 255))
+    (tuya:set-value (self 1) (self 8) (tuya-devices:pct-scale pct 10 1000))))
 
 (define (BulbDevice:set-colourtemp val)
   "Set raw colour temperature.  Type B: 0-1000, type A: 0-255."
-  (tuya:set-value (self 1) (self 8) val))
+  (tuya:set-value (self 1) (self 9) val))
 
 (define (BulbDevice:set-colourtemp-pct pct)
   "Set colour temperature as a percentage (0-100)."
-  (if (= (self 4) "A")
-    (tuya:set-value (self 1) (self 8) (tuya-devices:pct-scale pct 0 255))
-    (tuya:set-value (self 1) (self 8) (tuya-devices:pct-scale pct 0 1000))))
+  (if (= (self 5) "A")
+    (tuya:set-value (self 1) (self 9) (tuya-devices:pct-scale pct 0 255))
+    (tuya:set-value (self 1) (self 9) (tuya-devices:pct-scale pct 0 1000))))
 
 (define (BulbDevice:set-colour r g b)
   "Set colour from RGB values (0-255 each).  Converts to HSV, encodes as hex,
    sets mode to colour, then writes the colour DP."
   (let (hsv (tuya-devices:rgb-to-hsv r g b)
-        hex (if (= (self 4) "A")
+        hex (if (= (self 5) "A")
               (tuya-devices:hsv-hex-a (hsv 0) (hsv 1) (hsv 2))
               (tuya-devices:hsv-hex-b (hsv 0) (hsv 1) (hsv 2))))
-    (tuya:set-value (self 1) (self 6) "colour")
-    (tuya:set-value (self 1) (self 9) hex)))
+    (tuya:set-value (self 1) (self 7) "colour")
+    (tuya:set-value (self 1) (self 10) hex)))
 
 (define (BulbDevice:set-hsv h s v)
   "Set colour from HSV directly.  h=0-360, s and v use device scale
    (type B: 0-1000, type A: 0-255)."
-  (let (hex (if (= (self 4) "A")
+  (let (hex (if (= (self 5) "A")
               (tuya-devices:hsv-hex-a h s v)
               (tuya-devices:hsv-hex-b h s v)))
-    (tuya:set-value (self 1) (self 6) "colour")
-    (tuya:set-value (self 1) (self 9) hex)))
+    (tuya:set-value (self 1) (self 7) "colour")
+    (tuya:set-value (self 1) (self 10) hex)))
 
 (define (BulbDevice:set-white brightness colourtemp)
   "Set white mode with brightness and colour temperature (raw values)."
-  (tuya:set-value (self 1) (self 6) "white")
-  (tuya:set-value (self 1) (self 7) brightness)
-  (tuya:set-value (self 1) (self 8) colourtemp))
+  (tuya:set-value (self 1) (self 7) "white")
+  (tuya:set-value (self 1) (self 8) brightness)
+  (tuya:set-value (self 1) (self 9) colourtemp))
+
+(define (BulbDevice:reconnect)
+  (tuya-devices:reconnect-device (self 1) (self 4) (self 3)))
 
 (define (BulbDevice:status)
   (tuya:status (self 1)))
@@ -216,30 +238,33 @@
 
 (define (CoverDevice:CoverDevice version ip device-id local-key)
   "Create a cover device.
-   Fields: 0=class, 1=handle, 2=device-id, 3=local-key, 4=cover-type."
+   Fields: 0=class, 1=handle, 2=device-id, 3=local-key, 4=ip, 5=cover-type."
   (let (dev (tuya-devices:connect-device version ip device-id local-key))
-    (list CoverDevice dev device-id local-key 1)))
+    (list CoverDevice dev device-id local-key ip 1)))
 
 (define (CoverDevice:set-cover-type typ)
   "Override auto-detected cover type (1-8)."
-  (setf (self 4) typ))
+  (setf (self 5) typ))
 
 (define (CoverDevice:open-cover)
   "Open the cover."
-  (tuya:set-value (self 1) 1 (CoverDevice:open-cmds (self 4))))
+  (tuya:set-value (self 1) 1 (CoverDevice:open-cmds (self 5))))
 
 (define (CoverDevice:close-cover)
   "Close the cover."
-  (tuya:set-value (self 1) 1 (CoverDevice:close-cmds (self 4))))
+  (tuya:set-value (self 1) 1 (CoverDevice:close-cmds (self 5))))
 
 (define (CoverDevice:stop-cover)
   "Stop the cover."
-  (let (cmd (CoverDevice:stop-cmds (self 4)))
+  (let (cmd (CoverDevice:stop-cmds (self 5)))
     (when cmd (tuya:set-value (self 1) 1 cmd))))
 
 (define (CoverDevice:set-position pct)
   "Set cover position (0-100).  Uses DP 2."
   (tuya:set-value (self 1) 2 pct))
+
+(define (CoverDevice:reconnect)
+  (tuya-devices:reconnect-device (self 1) (self 4) (self 3)))
 
 (define (CoverDevice:status)
   (tuya:status (self 1)))
@@ -264,25 +289,25 @@
           (dp-switch 1) (dp-target 2) (dp-current 3) (dp-mode 4) (temp-scale 10))
   "Create a thermostat device.  DP numbers and temp-scale (divisor for raw
    values, e.g. 10 means device sends 720 for 72.0) are overridable.
-   Fields: 0=class, 1=handle, 2=device-id, 3=local-key,
-   4=dp-switch, 5=dp-target, 6=dp-current, 7=dp-mode, 8=temp-scale."
+   Fields: 0=class, 1=handle, 2=device-id, 3=local-key, 4=ip,
+   5=dp-switch, 6=dp-target, 7=dp-current, 8=dp-mode, 9=temp-scale."
   (let (dev (tuya-devices:connect-device version ip device-id local-key))
-    (list ThermostatDevice dev device-id local-key
+    (list ThermostatDevice dev device-id local-key ip
           dp-switch dp-target dp-current dp-mode temp-scale)))
 
 (define (ThermostatDevice:turn-on)
-  (tuya:set-value (self 1) (self 4) true))
+  (tuya:set-value (self 1) (self 5) true))
 
 (define (ThermostatDevice:turn-off)
-  (tuya:set-value (self 1) (self 4) nil))
+  (tuya:set-value (self 1) (self 5) nil))
 
 (define (ThermostatDevice:set-temperature temp)
   "Set target temperature.  Multiplied by temp-scale before sending."
-  (tuya:set-value (self 1) (self 5) (int (round (mul temp (self 8)) 0))))
+  (tuya:set-value (self 1) (self 6) (int (round (mul temp (self 9)) 0))))
 
 (define (ThermostatDevice:set-mode mode)
   "Set mode: \"heat\", \"cool\", \"auto\", or \"off\"."
-  (tuya:set-value (self 1) (self 7) mode))
+  (tuya:set-value (self 1) (self 8) mode))
 
 (define (ThermostatDevice:get-temperature)
   "Read current temperature from device status.  Returns float or nil."
@@ -292,8 +317,11 @@
         (when parsed
           (let (dps (lookup "dps" parsed))
             (when dps
-              (let (raw (lookup (string (self 6)) dps))
-                (when raw (div raw (self 8)))))))))))
+              (let (raw (lookup (string (self 7)) dps))
+                (when raw (div raw (self 9)))))))))))
+
+(define (ThermostatDevice:reconnect)
+  (tuya-devices:reconnect-device (self 1) (self 4) (self 3)))
 
 (define (ThermostatDevice:status)
   (tuya:status (self 1)))
@@ -316,24 +344,27 @@
 (define (FanDevice:FanDevice version ip device-id local-key
           (dp-switch 1) (dp-speed 3) (dp-oscillation 4))
   "Create a fan device.
-   Fields: 0=class, 1=handle, 2=device-id, 3=local-key,
-   4=dp-switch, 5=dp-speed, 6=dp-oscillation."
+   Fields: 0=class, 1=handle, 2=device-id, 3=local-key, 4=ip,
+   5=dp-switch, 6=dp-speed, 7=dp-oscillation."
   (let (dev (tuya-devices:connect-device version ip device-id local-key))
-    (list FanDevice dev device-id local-key dp-switch dp-speed dp-oscillation)))
+    (list FanDevice dev device-id local-key ip dp-switch dp-speed dp-oscillation)))
 
 (define (FanDevice:turn-on)
-  (tuya:set-value (self 1) (self 4) true))
+  (tuya:set-value (self 1) (self 5) true))
 
 (define (FanDevice:turn-off)
-  (tuya:set-value (self 1) (self 4) nil))
+  (tuya:set-value (self 1) (self 5) nil))
 
 (define (FanDevice:set-speed speed)
   "Set fan speed (int or string depending on device)."
-  (tuya:set-value (self 1) (self 5) speed))
+  (tuya:set-value (self 1) (self 6) speed))
 
 (define (FanDevice:set-oscillation flag)
   "Enable or disable oscillation."
-  (tuya:set-value (self 1) (self 6) (if flag true nil)))
+  (tuya:set-value (self 1) (self 7) (if flag true nil)))
+
+(define (FanDevice:reconnect)
+  (tuya-devices:reconnect-device (self 1) (self 4) (self 3)))
 
 (define (FanDevice:status)
   (tuya:status (self 1)))
@@ -350,15 +381,18 @@
 
 (define (LockDevice:LockDevice version ip device-id local-key (dp-lock 1))
   "Create a lock device.
-   Fields: 0=class, 1=handle, 2=device-id, 3=local-key, 4=dp-lock."
+   Fields: 0=class, 1=handle, 2=device-id, 3=local-key, 4=ip, 5=dp-lock."
   (let (dev (tuya-devices:connect-device version ip device-id local-key))
-    (list LockDevice dev device-id local-key dp-lock)))
+    (list LockDevice dev device-id local-key ip dp-lock)))
 
 (define (LockDevice:lock)
-  (tuya:set-value (self 1) (self 4) true))
+  (tuya:set-value (self 1) (self 5) true))
 
 (define (LockDevice:unlock)
-  (tuya:set-value (self 1) (self 4) nil))
+  (tuya:set-value (self 1) (self 5) nil))
+
+(define (LockDevice:reconnect)
+  (tuya-devices:reconnect-device (self 1) (self 4) (self 3)))
 
 (define (LockDevice:status)
   (tuya:status (self 1)))
@@ -376,24 +410,27 @@
 (define (SirenDevice:SirenDevice version ip device-id local-key
           (dp-switch 104) (dp-volume 5) (dp-duration 7))
   "Create a siren device.
-   Fields: 0=class, 1=handle, 2=device-id, 3=local-key,
-   4=dp-switch, 5=dp-volume, 6=dp-duration."
+   Fields: 0=class, 1=handle, 2=device-id, 3=local-key, 4=ip,
+   5=dp-switch, 6=dp-volume, 7=dp-duration."
   (let (dev (tuya-devices:connect-device version ip device-id local-key))
-    (list SirenDevice dev device-id local-key dp-switch dp-volume dp-duration)))
+    (list SirenDevice dev device-id local-key ip dp-switch dp-volume dp-duration)))
 
 (define (SirenDevice:turn-on)
-  (tuya:set-value (self 1) (self 4) true))
+  (tuya:set-value (self 1) (self 5) true))
 
 (define (SirenDevice:turn-off)
-  (tuya:set-value (self 1) (self 4) nil))
+  (tuya:set-value (self 1) (self 5) nil))
 
 (define (SirenDevice:set-volume vol)
   "Set siren volume (device-specific scale)."
-  (tuya:set-value (self 1) (self 5) vol))
+  (tuya:set-value (self 1) (self 6) vol))
 
 (define (SirenDevice:set-duration secs)
   "Set siren duration in seconds."
-  (tuya:set-value (self 1) (self 6) secs))
+  (tuya:set-value (self 1) (self 7) secs))
+
+(define (SirenDevice:reconnect)
+  (tuya-devices:reconnect-device (self 1) (self 4) (self 3)))
 
 (define (SirenDevice:status)
   (tuya:status (self 1)))

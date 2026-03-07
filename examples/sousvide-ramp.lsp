@@ -285,11 +285,7 @@
               (sleep 60000)
 
               ;; Reconnect if connection dropped
-              (unless (tuya:is-connected (sv 1))
-                (println "  reconnecting...")
-                (tuya:connect (sv 1) ip)
-                (when (>= (tuya:get-protocol (sv 1)) tuya:PROTO_V34)
-                  (tuya:negotiate-session (sv 1) local-key)))
+              (:reconnect sv)
 
               (set-temperature-f sv temp)))
 
