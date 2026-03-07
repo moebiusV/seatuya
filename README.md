@@ -390,7 +390,7 @@ seatuya -- just change the syntax.
 | | `tuya_set_value_float(d, dp, val)` | |
 | `d.status()` | `tuya_status(d)` | `(d:status)` |
 | `d.heartbeat()` | `tuya_heartbeat(d)` | `(d:heartbeat)` |
-| *(reconnect logic in set_status)* | `tuya_reconnect(d)` | `(d:reconnect)` |
+| *(auto-reconnect in set_status)* | `tuya_reconnect(d)` | *(auto-reconnect in all methods)* |
 
 **Credential and state getters:**
 

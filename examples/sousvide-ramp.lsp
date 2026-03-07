@@ -285,9 +285,6 @@
             (print (format "[%3d/%d min] " i steps))
             (sleep 60000)
 
-            ;; Reconnect if connection dropped
-            (sv:reconnect)
-
             (set-temperature-f temp)))
 
         (println (format "\nramp complete -- holding at %.1f F" end-f))

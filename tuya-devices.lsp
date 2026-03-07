@@ -82,20 +82,26 @@
   (setq handle (tuya:create id address local-key version))
   (unless handle (throw (string "TuyaDevice: connect failed to " address))))
 
+(define (TuyaDevice:_retry func)
+  "Call func.  If it returns nil, reconnect and retry once."
+  (let (result (func))
+    (if result result
+      (when (tuya:reconnect handle) (func)))))
+
 (define (TuyaDevice:turn-on (dp 1))
-  (tuya:turn-on handle dp))
+  (_retry (fn () (tuya:turn-on handle dp))))
 
 (define (TuyaDevice:turn-off (dp 1))
-  (tuya:turn-off handle dp))
+  (_retry (fn () (tuya:turn-off handle dp))))
 
 (define (TuyaDevice:set-value dp val)
-  (tuya:set-value handle dp val))
+  (_retry (fn () (tuya:set-value handle dp val))))
 
 (define (TuyaDevice:status)
-  (tuya:status handle))
+  (_retry (fn () (tuya:status handle))))
 
 (define (TuyaDevice:heartbeat)
-  (tuya:heartbeat handle))
+  (_retry (fn () (tuya:heartbeat handle))))
 
 (define (TuyaDevice:reconnect)
   (tuya:reconnect handle))
@@ -123,7 +129,7 @@
 
 (define (OutletDevice:set-dimmer pct)
   "Set dimmer level.  pct is 0-100, mapped to device range 25-255 on DP 3."
-  (tuya:set-value handle 3 (tuya-devices:pct-scale pct 25 255)))
+  (_retry (fn () (tuya:set-value handle 3 (tuya-devices:pct-scale pct 25 255)))))
 
 
 ;; ====================================================================
@@ -149,34 +155,32 @@
     (map set '(dp-switch dp-mode dp-brightness dp-colourtemp dp-colour) '(20 21 22 23 24))))
 
 (define (BulbDevice:turn-on)
-  (tuya:turn-on handle dp-switch))
+  (_retry (fn () (tuya:turn-on handle dp-switch))))
 
 (define (BulbDevice:turn-off)
-  (tuya:turn-off handle dp-switch))
+  (_retry (fn () (tuya:turn-off handle dp-switch))))
 
 (define (BulbDevice:set-mode mode)
   "Set mode: \"white\", \"colour\", \"scene\", or \"music\"."
-  (tuya:set-value handle dp-mode mode))
+  (_retry (fn () (tuya:set-value handle dp-mode mode))))
 
 (define (BulbDevice:set-brightness val)
   "Set raw brightness value.  Type B: 10-1000, type A: 25-255."
-  (tuya:set-value handle dp-brightness val))
+  (_retry (fn () (tuya:set-value handle dp-brightness val))))
 
 (define (BulbDevice:set-brightness-pct pct)
   "Set brightness as a percentage (0-100)."
-  (if (= type "A")
-    (tuya:set-value handle dp-brightness (tuya-devices:pct-scale pct 25 255))
-    (tuya:set-value handle dp-brightness (tuya-devices:pct-scale pct 10 1000))))
+  (let (v (if (= type "A") (tuya-devices:pct-scale pct 25 255) (tuya-devices:pct-scale pct 10 1000)))
+    (_retry (fn () (tuya:set-value handle dp-brightness v)))))
 
 (define (BulbDevice:set-colourtemp val)
   "Set raw colour temperature.  Type B: 0-1000, type A: 0-255."
-  (tuya:set-value handle dp-colourtemp val))
+  (_retry (fn () (tuya:set-value handle dp-colourtemp val))))
 
 (define (BulbDevice:set-colourtemp-pct pct)
   "Set colour temperature as a percentage (0-100)."
-  (if (= type "A")
-    (tuya:set-value handle dp-colourtemp (tuya-devices:pct-scale pct 0 255))
-    (tuya:set-value handle dp-colourtemp (tuya-devices:pct-scale pct 0 1000))))
+  (let (v (if (= type "A") (tuya-devices:pct-scale pct 0 255) (tuya-devices:pct-scale pct 0 1000)))
+    (_retry (fn () (tuya:set-value handle dp-colourtemp v)))))
 
 (define (BulbDevice:set-colour r g b)
   "Set colour from RGB values (0-255 each).  Converts to HSV, encodes as hex,
@@ -185,8 +189,8 @@
         hex (if (= type "A")
               (tuya-devices:hsv-hex-a (hsv 0) (hsv 1) (hsv 2))
               (tuya-devices:hsv-hex-b (hsv 0) (hsv 1) (hsv 2))))
-    (tuya:set-value handle dp-mode "colour")
-    (tuya:set-value handle dp-colour hex)))
+    (_retry (fn () (tuya:set-value handle dp-mode "colour")))
+    (_retry (fn () (tuya:set-value handle dp-colour hex)))))
 
 (define (BulbDevice:set-hsv h s v)
   "Set colour from HSV directly.  h=0-360, s and v use device scale
@@ -194,14 +198,15 @@
   (let (hex (if (= type "A")
               (tuya-devices:hsv-hex-a h s v)
               (tuya-devices:hsv-hex-b h s v)))
-    (tuya:set-value handle dp-mode "colour")
-    (tuya:set-value handle dp-colour hex)))
+    (_retry (fn () (tuya:set-value handle dp-mode "colour")))
+    (_retry (fn () (tuya:set-value handle dp-colour hex)))))
 
 (define (BulbDevice:set-white brightness colourtemp)
   "Set white mode with brightness and colour temperature (raw values)."
-  (tuya:set-value handle dp-mode "white")
-  (tuya:set-value handle dp-brightness brightness)
-  (tuya:set-value handle dp-colourtemp colourtemp))
+  (_retry (fn () (tuya:set-value handle dp-mode "white")))
+  (_retry (fn () (tuya:set-value handle dp-brightness brightness)))
+  (_retry (fn () (tuya:set-value handle dp-colourtemp colourtemp))))
+
 
 
 ;; ====================================================================
@@ -237,18 +242,18 @@
   (setq cover-type typ))
 
 (define (CoverDevice:open-cover)
-  (tuya:set-value handle 1 (open-cmds cover-type)))
+  (_retry (fn () (tuya:set-value handle 1 (open-cmds cover-type)))))
 
 (define (CoverDevice:close-cover)
-  (tuya:set-value handle 1 (close-cmds cover-type)))
+  (_retry (fn () (tuya:set-value handle 1 (close-cmds cover-type)))))
 
 (define (CoverDevice:stop-cover)
   (let (cmd (stop-cmds cover-type))
-    (when cmd (tuya:set-value handle 1 cmd))))
+    (when cmd (_retry (fn () (tuya:set-value handle 1 cmd))))))
 
 (define (CoverDevice:set-position pct)
   "Set cover position (0-100).  Uses DP 2."
-  (tuya:set-value handle 2 pct))
+  (_retry (fn () (tuya:set-value handle 2 pct))))
 
 
 ;; ====================================================================
@@ -278,22 +283,22 @@
   (setq temp-scale _temp-scale))
 
 (define (ThermostatDevice:turn-on)
-  (tuya:turn-on handle dp-switch))
+  (_retry (fn () (tuya:turn-on handle dp-switch))))
 
 (define (ThermostatDevice:turn-off)
-  (tuya:turn-off handle dp-switch))
+  (_retry (fn () (tuya:turn-off handle dp-switch))))
 
 (define (ThermostatDevice:set-temperature temp)
   "Set target temperature.  Multiplied by temp-scale before sending."
-  (tuya:set-value handle dp-target (int (round (mul temp temp-scale) 0))))
+  (_retry (fn () (tuya:set-value handle dp-target (int (round (mul temp temp-scale) 0))))))
 
 (define (ThermostatDevice:set-mode mode)
   "Set mode: \"heat\", \"cool\", \"auto\", or \"off\"."
-  (tuya:set-value handle dp-mode mode))
+  (_retry (fn () (tuya:set-value handle dp-mode mode))))
 
 (define (ThermostatDevice:get-temperature)
   "Read current temperature from device status.  Returns float or nil."
-  (let (resp (tuya:status handle))
+  (let (resp (_retry (fn () (tuya:status handle))))
     (when resp
       (let (parsed (json-parse resp))
         (when parsed
@@ -323,7 +328,7 @@
 
 (define (SocketDevice:get-energy)
   "Query status and return assoc-list of current (mA), power (W), voltage (V)."
-  (let (resp (tuya:status handle))
+  (let (resp (_retry (fn () (tuya:status handle))))
     (when resp
       (let (parsed (json-parse resp))
         (when parsed
@@ -358,11 +363,11 @@
 
 (define (ClimateDevice:set-temperature temp)
   "Set target temperature (integer, in device's current unit)."
-  (tuya:set-value handle 2 (int temp)))
+  (_retry (fn () (tuya:set-value handle 2 (int temp)))))
 
 (define (ClimateDevice:get-temperature)
   "Read current room temperature from status.  Returns int or nil."
-  (let (resp (tuya:status handle))
+  (let (resp (_retry (fn () (tuya:status handle))))
     (when resp
       (let (parsed (json-parse resp))
         (when parsed
@@ -371,19 +376,19 @@
 
 (define (ClimateDevice:set-mode mode)
   "Set operating mode: \"cold\", \"hot\", \"wind\", or \"auto\"."
-  (tuya:set-value handle 4 mode))
+  (_retry (fn () (tuya:set-value handle 4 mode))))
 
 (define (ClimateDevice:set-fan-speed speed)
   "Set fan speed: \"1\" (low), \"2\" (medium), \"3\" (high)."
-  (tuya:set-value handle 5 speed))
+  (_retry (fn () (tuya:set-value handle 5 speed))))
 
 (define (ClimateDevice:set-temp-unit unit)
   "Set temperature unit: \"c\" or \"f\"."
-  (tuya:set-value handle 19 unit))
+  (_retry (fn () (tuya:set-value handle 19 unit))))
 
 (define (ClimateDevice:set-timer minutes)
   "Set timer in minutes."
-  (tuya:set-value handle 22 (int minutes)))
+  (_retry (fn () (tuya:set-value handle 22 (int minutes)))))
 
 
 ;; ====================================================================
@@ -405,19 +410,19 @@
 
 (define (DoorbellDevice:set-volume vol)
   "Set device volume (1-10).  DP 160."
-  (tuya:set-value handle 160 (int vol)))
+  (_retry (fn () (tuya:set-value handle 160 (int vol)))))
 
 (define (DoorbellDevice:set-motion-switch flag)
   "Enable or disable motion detection alarm.  DP 134."
-  (tuya:set-value handle 134 (if flag true nil)))
+  (_retry (fn () (tuya:set-value handle 134 (if flag true nil)))))
 
 (define (DoorbellDevice:set-indicator flag)
   "Enable or disable status indicator LED.  DP 101."
-  (tuya:set-value handle 101 (if flag true nil)))
+  (_retry (fn () (tuya:set-value handle 101 (if flag true nil)))))
 
 (define (DoorbellDevice:set-motion-sensitivity level)
   "Set motion sensitivity: \"0\" (low), \"1\" (medium), \"2\" (high).  DP 106."
-  (tuya:set-value handle 106 level))
+  (_retry (fn () (tuya:set-value handle 106 level))))
 
 
 ;; ====================================================================
@@ -445,29 +450,29 @@
 (define (IRRemoteControlDevice:study-start)
   "Enter study mode (device listens for IR signals from a real remote)."
   (if (= control-type 1)
-    (tuya:set-value handle 201 "{\"control\":\"study_exit\"}")
-    (tuya:set-value handle 13 "study")))
+    (_retry (fn () (tuya:set-value handle 201 "{\"control\":\"study_exit\"}")))
+    (_retry (fn () (tuya:set-value handle 13 "study")))))
 
 (define (IRRemoteControlDevice:study-end)
   "Exit study mode."
   (if (= control-type 1)
-    (tuya:set-value handle 201 "{\"control\":\"study_exit\"}")
-    (tuya:set-value handle 13 "study_exit")))
+    (_retry (fn () (tuya:set-value handle 201 "{\"control\":\"study_exit\"}")))
+    (_retry (fn () (tuya:set-value handle 13 "study_exit")))))
 
 (define (IRRemoteControlDevice:send-button base64-code)
   "Send a learned IR code (base64-encoded)."
   (if (= control-type 1)
-    (tuya:set-value handle 201 (string "{\"control\":\"send_ir\",\"key1\":\"" base64-code "\"}"))
-    (tuya:set-value handle 7 base64-code)))
+    (_retry (fn () (tuya:set-value handle 201 (string "{\"control\":\"send_ir\",\"key1\":\"" base64-code "\"}"))))
+    (_retry (fn () (tuya:set-value handle 7 base64-code)))))
 
 (define (IRRemoteControlDevice:send-key head key)
   "Send an IR head/key pair."
   (if (= control-type 1)
-    (tuya:set-value handle 201 (string "{\"control\":\"send_ir\",\"head\":\"" head "\",\"key1\":\"" key "\"}"))
+    (_retry (fn () (tuya:set-value handle 201 (string "{\"control\":\"send_ir\",\"head\":\"" head "\",\"key1\":\"" key "\"}"))))
     (begin
-      (tuya:set-value handle 3 head)
-      (tuya:set-value handle 4 key)
-      (tuya:set-value handle 13 "send"))))
+      (_retry (fn () (tuya:set-value handle 3 head)))
+      (_retry (fn () (tuya:set-value handle 4 key)))
+      (_retry (fn () (tuya:set-value handle 13 "send"))))))
 
 
 ;; ====================================================================
@@ -496,19 +501,19 @@
 
 (define (InverterHeatPumpDevice:set-target-temp temp)
   "Set target water temperature (integer, in device's current unit)."
-  (tuya:set-value handle 106 (int temp)))
+  (_retry (fn () (tuya:set-value handle 106 (int temp)))))
 
 (define (InverterHeatPumpDevice:set-silence-mode flag)
   "Enable or disable silence mode."
-  (tuya:set-value handle 117 (if flag true nil)))
+  (_retry (fn () (tuya:set-value handle 117 (if flag true nil)))))
 
 (define (InverterHeatPumpDevice:set-temp-unit unit)
   "Set temperature unit: \"c\" or \"f\"."
-  (tuya:set-value handle 103 unit))
+  (_retry (fn () (tuya:set-value handle 103 unit))))
 
 (define (InverterHeatPumpDevice:get-inlet-temp)
   "Read inlet water temperature from status.  Returns int or nil."
-  (let (resp (tuya:status handle))
+  (let (resp (_retry (fn () (tuya:status handle))))
     (when resp
       (let (parsed (json-parse resp))
         (when parsed
@@ -540,20 +545,20 @@
 
 (define (PresenceDetectorDevice:set-sensitivity val)
   "Set detection sensitivity (int)."
-  (tuya:set-value handle 2 (int val)))
+  (_retry (fn () (tuya:set-value handle 2 (int val)))))
 
 (define (PresenceDetectorDevice:set-near-detection dist)
   "Set near detection distance in cm."
-  (tuya:set-value handle 3 (int dist)))
+  (_retry (fn () (tuya:set-value handle 3 (int dist)))))
 
 (define (PresenceDetectorDevice:set-far-detection dist)
   "Set far detection distance in cm."
-  (tuya:set-value handle 4 (int dist)))
+  (_retry (fn () (tuya:set-value handle 4 (int dist)))))
 
 (define (PresenceDetectorDevice:set-detection-delay secs)
   "Set detection delay in seconds."
-  (tuya:set-value handle 101 (int secs)))
+  (_retry (fn () (tuya:set-value handle 101 (int secs)))))
 
 (define (PresenceDetectorDevice:set-fading-time secs)
   "Set fading time in seconds."
-  (tuya:set-value handle 102 (int secs)))
+  (_retry (fn () (tuya:set-value handle 102 (int secs)))))
