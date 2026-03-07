@@ -6,17 +6,14 @@ Supports protocol versions 3.1, 3.3, 3.4, and 3.5.
 
 ## Why seatuya?
 
-The Tuya ecosystem already has two solid libraries: tuyapp (C++) and
-tinytuya (Python).  Both work well, but both lock you into a single
-language.  If you want to talk to a Tuya device from Lua, Tcl,
-newLISP, Forth, Zig, Nim, or anything else that can call a C
-function, you are out of luck.
-
-seatuya fixes that.  It wraps tuyapp's C++ internals behind a plain C
-API with a stable ABI: opaque handles, no templates, no exceptions, no
-mangled symbols.  Any language with a foreign-function interface (FFI)
-can link to libseatuya and control Tuya devices directly, without
-shelling out to Python or embedding a C++ runtime.
+The Tuya local protocol has been implemented in many languages --
+tinytuya (Python), tuyapi (Node.js), tuyapp (C++), and others (see
+"Related projects" below).  Each one works well in its own ecosystem.
+seatuya takes a different approach: wrap the protocol behind a plain
+C ABI so that any language with a foreign-function interface can use
+it.  Opaque handles, C strings, ints, enums -- no templates, no
+exceptions, no mangled symbols.  If your language can call `dlopen`,
+it can control Tuya devices.
 
 The newLISP modules shipped in this repository are a proof of concept.
 newLISP has no Tuya support of its own and never will.  But with
