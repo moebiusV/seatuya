@@ -246,37 +246,106 @@ tuya_free_string(resp);
 tuya_destroy(dev);
 ```
 
-The high-level C functions handle the entire round-trip internally.
-The low-level API (`generate_payload`, `build_message`, `send`,
-`receive`, `decode_message`) is still available for advanced use
-cases like pipelining or custom command types.
-
 The same approach works in Python ctypes, Lua FFI, Ruby FFI, Tcl,
 Zig, Nim, Racket, Janet, or anything else that can call C functions.
 `seatuya.lsp` is under 250 lines.  A wrapper in your language of choice
 would be about the same.
 
-### Convenience functions
+### Data points and the interaction cycle
 
-The five-step round-trip (generate payload, build message, send,
-receive, decode) is handled by the C library itself.  Store
-credentials once with `tuya:set-credentials`, then use
-`tuya:set-value`, `tuya:turn-on`, `tuya:turn-off`, `tuya:status`,
-and `tuya:heartbeat`:
+Every Tuya device exposes its state through numbered **data points**
+(DPs).  A DP is just an integer key with a typed value -- boolean,
+integer, string, or enum.  DP 1 on a smart plug is typically the
+power switch (true/false).  DP 2 on a cover motor might be the
+position (0-100).  DP 103 on an Inkbird sous vide is the target
+temperature (integer, Celsius times 10).  The numbers are
+device-specific, assigned by the manufacturer, and discoverable
+through the Tuya cloud API or by querying the device directly.
 
-```newlisp
-(tuya:set-credentials dev device-id local-key)
+The Tuya local protocol treats every interaction the same way,
+regardless of device type.  To change a DP value or query the
+device's current state, the caller performs a five-step round-trip:
 
-(tuya:turn-on dev 1)              ; turn on DP 1
-(tuya:set-value dev 3 "colour")   ; set DP 3 to a string
-(tuya:set-value dev 103 720)      ; set DP 103 to integer 720
-(tuya:status dev)                  ; query all DPs
-(tuya:reconnect dev)               ; re-establish dropped connection
+1. **Generate payload** -- build the JSON structure the device
+   expects for the command type (`CONTROL` to set a value,
+   `DP_QUERY` to read state), embedding the device ID and the
+   DP key-value pair.
+2. **Build message** -- encrypt and frame the payload into a Tuya
+   protocol packet using the device's local key.
+3. **Send** -- write the packet to the TCP socket.
+4. **Receive** -- read the device's response packet.
+5. **Decode** -- decrypt and extract the JSON response.
+
+Using the low-level API, that cycle looks like this in C:
+
+```c
+/* set DP 1 to true (turn on a smart plug) */
+char *payload = tuya_generate_payload(dev,
+    TUYA_CMD_CONTROL, device_id, "{\"1\":true}");
+unsigned char buf[1024];
+int n = tuya_build_message(dev, buf,
+    TUYA_CMD_CONTROL, payload, local_key);
+tuya_free_string(payload);
+tuya_send(dev, buf, n);
+n = tuya_receive(dev, buf, sizeof buf, 0);
+char *response = tuya_decode_message(dev, buf, n, local_key);
+/* response is the device's JSON reply */
+tuya_free_string(response);
 ```
 
-Values are automatically formatted as the correct JSON type (boolean,
-string, integer, or float) based on the newLISP value passed.  These
-functions are the building blocks for the FOOP device classes below.
+That is a lot of boilerplate for "turn on the plug".  Every
+interaction follows exactly the same pattern -- the only things that
+change are the command type, the DP number, and the value.  So the
+library wraps the entire cycle into single-call functions:
+
+```c
+/* same thing, high-level API */
+char *response = tuya_turn_on(dev, 1);
+tuya_free_string(response);
+```
+
+The high-level functions (`tuya_set_value_bool`, `tuya_set_value_int`,
+`tuya_set_value_string`, `tuya_set_value_float`, `tuya_turn_on`,
+`tuya_turn_off`, `tuya_status`, `tuya_heartbeat`) all perform the
+full five-step round-trip internally, using the credentials and
+internal buffer stored on the device handle.  They return a `malloc`'d
+JSON response string (freed with `tuya_free_string`), or NULL on error.
+
+The low-level API remains available for cases where you need
+fine-grained control -- pipelining multiple commands, custom command
+types, or async workflows where you manage the send/receive timing
+yourself.
+
+### From data points to named methods
+
+The high-level C functions still require the caller to know the raw
+DP numbers.  That is fine for a C program that controls one specific
+device, but for a general-purpose library it helps to have one more
+layer: named methods that map human-readable operations to the right
+DP for each device category.
+
+In newLISP, the FOOP device classes provide this.  Each class knows
+its own DP layout and exposes named methods:
+
+```newlisp
+; Raw DP -- you need to know that DP 1 is the power switch,
+; DP 22 is brightness, DP 24 is colour:
+(tuya:set-value dev 1 true)
+(tuya:set-value dev 22 500)
+(tuya:set-value dev 24 "00dc004603e8")
+
+; Named methods -- the class knows the DP numbers:
+(:turn-on bulb)
+(:set-brightness bulb 500)
+(:set-colour bulb 255 0 0)       ; RGB, converted to HSV hex internally
+```
+
+The progression is: raw protocol (5 steps) -> high-level C function
+(1 step, DP number) -> named FOOP method (1 step, no DP number).
+Each layer hides exactly one kind of detail: the C library hides
+buffer management and encryption, the high-level functions hide the
+round-trip ceremony, and the FOOP classes hide device-specific DP
+mappings.
 
 ## Device classes (newLISP FOOP)
 
