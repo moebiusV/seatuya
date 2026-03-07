@@ -398,7 +398,7 @@ seatuya -- just change the syntax.
 |--------------------|-------------|---------------------|
 | `d.id` | `tuya_get_device_id(d)` | `d:id` |
 | `d.local_key` | `tuya_get_local_key(d)` | `d:local-key` |
-| `d.address` | `tuya_get_ip(d)` | `d:ip` |
+| `d.address` | `tuya_get_ip(d)` | `d:address` |
 | `d.version` | *(n/a)* | `d:version` |
 | *(n/a)* | `tuya_get_protocol(d)` | `(tuya:get-protocol d:handle)` |
 | *(n/a)* | `tuya_get_session_state(d)` | `(tuya:get-session-state d:handle)` |
