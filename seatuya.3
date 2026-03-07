@@ -1,6 +1,6 @@
 .TH SEATUYA 3 "2026-03-06" "seatuya 0.1.0" "Library Functions Manual"
 .SH NAME
-seatuya \- C wrapper for the tuyapp Tuya library
+seatuya \- C library for local control of Tuya smart devices
 .SH SYNOPSIS
 .B #include <seatuya/seatuya.h>
 .PP
@@ -10,13 +10,18 @@ seatuya \- C wrapper for the tuyapp Tuya library
 .br
 .BI "void seatuya_destroy(seatuya_device_t *" dev ");"
 .PP
-.BI "int seatuya_connect(seatuya_device_t *" dev ", const char *" hostname ");"
+.BI "bool seatuya_connect(seatuya_device_t *" dev ", const char *" hostname ");"
 .br
 .BI "void seatuya_disconnect(seatuya_device_t *" dev ");"
 .br
-.BI "int seatuya_is_connected(seatuya_device_t *" dev ");"
+.BI "bool seatuya_is_connected(seatuya_device_t *" dev ");"
 .PP
-.BI "int seatuya_negotiate_session(seatuya_device_t *" dev ", const char *" key ");"
+.BI "bool seatuya_negotiate_session(seatuya_device_t *" dev ", const char *" key ");"
+.br
+.BI "bool seatuya_negotiate_session_start(seatuya_device_t *" dev ", const char *" key ");"
+.br
+.BI "bool seatuya_negotiate_session_finalize(seatuya_device_t *" dev ","
+.BI "    unsigned char *" buf ", int " size ", const char *" key ");"
 .PP
 .BI "int seatuya_build_message(seatuya_device_t *" dev ", unsigned char *" buf ","
 .BI "    enum seatuya_command " cmd ", const char *" payload ", const char *" key ");"
@@ -34,44 +39,154 @@ seatuya \- C wrapper for the tuyapp Tuya library
 .BI "    int " maxsize ", int " minsize ");"
 .PP
 .BI "void seatuya_free_string(char *" str ");"
+.PP
+.BI "void seatuya_set_async_mode(seatuya_device_t *" dev ", bool " async ");"
+.br
+.BI "bool seatuya_is_socket_readable(seatuya_device_t *" dev ");"
+.br
+.BI "bool seatuya_is_socket_writable(seatuya_device_t *" dev ");"
+.br
+.BI "bool seatuya_set_session_ready(seatuya_device_t *" dev ");"
+.PP
+.BI "enum seatuya_protocol seatuya_get_protocol(seatuya_device_t *" dev ");"
+.br
+.BI "enum seatuya_session_state seatuya_get_session_state(seatuya_device_t *" dev ");"
+.br
+.BI "enum seatuya_socket_state seatuya_get_socket_state(seatuya_device_t *" dev ");"
+.br
+.BI "int seatuya_get_last_error(seatuya_device_t *" dev ");"
 .SH DESCRIPTION
 .B seatuya
-provides a pure C API wrapping the tuyapp C++ library for local
-communication with Tuya smart devices.
+is a C wrapper around the tuyapp C++ library.
+It provides a stable C ABI for communicating with Tuya / Smart Life
+devices on the local network, supporting protocol versions 3.1, 3.3,
+3.4, and 3.5.
 .PP
+The existing Tuya libraries are language-specific: tuyapp requires C++,
+and tinytuya requires Python.
+.B seatuya
+exposes the same functionality through a plain C interface with no C++
+types crossing the ABI boundary: opaque struct pointers, C strings,
+ints, and enums.
+Any language with a foreign-function interface (FFI) can link against
+.B libseatuya
+and control Tuya devices directly, without embedding a C++ runtime
+or a Python interpreter.
+.SS Lifecycle
 .BR seatuya_create ()
-creates a device handle for the given protocol version
+allocates a device handle for the given protocol version
 ("3.1", "3.3", "3.4", or "3.5").
 Returns NULL on invalid version.
-.PP
+The handle must be freed with
+.BR seatuya_destroy ().
+.SS Connection
 .BR seatuya_connect ()
 opens a TCP connection to the device on port 6668.
 For protocol 3.4 and above, call
 .BR seatuya_negotiate_session ()
-after connecting.
-.PP
+after connecting to establish an encrypted session.
+For 3.1 and 3.3, session negotiation is a no-op.
+.SS Async mode
+By default, receive calls block.
+.BR seatuya_set_async_mode ()
+enables non-blocking operation.
+When async mode is on,
+.BR seatuya_receive ()
+returns immediately with \-1 if no data is available, and
+.BR seatuya_is_socket_readable ()
+can be used to poll.
+For protocol 3.4+, call
+.BR seatuya_set_session_ready ()
+after async negotiation completes.
+.SS Session negotiation
+Protocol versions 3.4 and 3.5 require a key-exchange handshake before
+encrypted communication can begin.
+.BR seatuya_negotiate_session ()
+performs this in a single blocking call.
+For async workflows, use
+.BR seatuya_negotiate_session_start ()
+to send the initial handshake, then call
+.BR seatuya_negotiate_session_finalize ()
+with the device's response.
+.SS Messages
 .BR seatuya_build_message ()
 encrypts and frames a JSON payload for transmission.
 .BR seatuya_decode_message ()
 decrypts a received response.
-Both require the device's local encryption key.
+Both require the device's local encryption key (a 16-byte hex string
+from the Tuya cloud).
+.PP
+.BR seatuya_generate_payload ()
+builds the JSON payload structure expected by the device for a given
+command and set of data points.
 .PP
 Strings returned by
 .BR seatuya_decode_message ()
 and
 .BR seatuya_generate_payload ()
-must be freed with
+are heap-allocated and must be freed with
 .BR seatuya_free_string ().
+.SS State queries
+.BR seatuya_get_protocol (),
+.BR seatuya_get_session_state (),
+.BR seatuya_get_socket_state (),
+and
+.BR seatuya_get_last_error ()
+return the current state of the device handle.
 .SH RETURN VALUES
-Functions returning
-.B int
-use 1 for success and 0 for failure, unless documented otherwise.
+.BR seatuya_connect (),
+.BR seatuya_negotiate_session (),
+and related session functions return
+.B true
+on success and
+.B false
+on failure.
+.PP
 .BR seatuya_build_message ()
-returns the message size or \-1 on error.
+returns the message size in bytes, or \-1 on error.
+.PP
 .BR seatuya_send ()
 and
 .BR seatuya_receive ()
-return byte counts or \-1 on error.
+return byte counts, or \-1 on error.
+.SH EXAMPLES
+Connect to a device and turn on data point 1:
+.PP
+.RS
+.nf
+seatuya_device_t *dev = seatuya_create("3.4");
+seatuya_connect(dev, "192.168.1.100");
+seatuya_negotiate_session(dev, local_key);
+
+char *payload = seatuya_generate_payload(dev,
+    SEATUYA_CMD_CONTROL, device_id, "{\\"1\\":true}");
+unsigned char buf[1024];
+int n = seatuya_build_message(dev, buf,
+    SEATUYA_CMD_CONTROL, payload, local_key);
+seatuya_free_string(payload);
+
+seatuya_send(dev, buf, n);
+n = seatuya_receive(dev, buf, sizeof buf, 0);
+char *response = seatuya_decode_message(dev, buf, n, local_key);
+printf("%s\\n", response);
+seatuya_free_string(response);
+
+seatuya_destroy(dev);
+.fi
+.RE
+.PP
+The same workflow can be replicated from any language with FFI.
+The newLISP bindings shipped with seatuya (seatuya.lsp) demonstrate
+this: a 200-line module wraps the entire C API, and the example
+programs (seatuya-wizard.lsp, sousvide-ramp.lsp) use it to control
+real hardware without writing any C.
+.SH CONSTANTS
+.TP
+.B SEATUYA_DEFAULT_PORT
+6668 (Tuya local protocol port).
+.TP
+.B SEATUYA_RECOMMENDED_BUFSIZE
+1024 bytes.
 .SH SEE ALSO
 .BR tuyapp (3)
 .SH AUTHORS
