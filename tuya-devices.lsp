@@ -19,7 +19,7 @@
 ;   (my-plug:destroy)
 ;   (delete 'my-plug)
 
-(load (string (env "SEATUYA_LSP_DIR" (real-path ".")) "/seatuya.lsp"))
+(load (string (or (env "SEATUYA_LSP_DIR") (real-path ".")) "/seatuya.lsp"))
 
 ;; ====================================================================
 ;;  Shared utilities (tuya-devices context)
@@ -68,8 +68,13 @@
 ;; Provides turn-on, turn-off, set-value, status, heartbeat, reconnect,
 ;; destroy.  All subclasses inherit these via (new TuyaDevice 'SubClass).
 ;;
-;; Constructor stores id, address, local-key, version as context variables
-;; so they are accessible as d:id, d:address, d:local-key, d:version.
+;; Constructor stores id, address, local-key, version as context
+;; variables so they are accessible as d:id, d:address, etc.
+;;
+;; All round-trip methods auto-reconnect on failure (matching tinytuya).
+;; Configurable via retry-count (default 1, like tinytuya).
+;; Subclass methods call inherited set-value/turn-on/status to get
+;; retry for free -- no need to wrap each call individually.
 
 (context 'TuyaDevice)
 
@@ -79,14 +84,18 @@
   (setq address _address)
   (setq local-key _local-key)
   (setq version _version)
+  (setq retry-count 1)
   (setq handle (tuya:create id address local-key version))
   (unless handle (throw (string "TuyaDevice: connect failed to " address))))
 
 (define (TuyaDevice:_retry func)
-  "Call func.  If it returns nil, reconnect and retry once."
-  (let (result (func))
-    (if result result
-      (when (tuya:reconnect handle) (func)))))
+  "Call func.  On nil result, reconnect and retry up to retry-count times."
+  (let (result (func) tries 0)
+    (while (and (not result) (< tries retry-count))
+      (inc tries)
+      (when (tuya:reconnect handle)
+        (setq result (func))))
+    result))
 
 (define (TuyaDevice:turn-on (dp 1))
   (_retry (fn () (tuya:turn-on handle dp))))
@@ -123,13 +132,13 @@
 
 (define (OutletDevice:OutletDevice _version _address _id _local-key)
   "Constructor: connect to an outlet device."
-  (setq id _id  address _address  local-key _local-key  version _version)
+  (setq id _id  address _address  local-key _local-key  version _version  retry-count 1)
   (setq handle (tuya:create id address local-key version))
   (unless handle (throw (string "OutletDevice: connect failed to " address))))
 
 (define (OutletDevice:set-dimmer pct)
   "Set dimmer level.  pct is 0-100, mapped to device range 25-255 on DP 3."
-  (_retry (fn () (tuya:set-value handle 3 (tuya-devices:pct-scale pct 25 255)))))
+  (set-value 3 (tuya-devices:pct-scale pct 25 255)))
 
 
 ;; ====================================================================
@@ -146,7 +155,7 @@
 
 (define (BulbDevice:BulbDevice _version _address _id _local-key (bulb-type "B"))
   "Constructor: connect to a bulb device.  bulb-type: \"A\" or \"B\" (default)."
-  (setq id _id  address _address  local-key _local-key  version _version)
+  (setq id _id  address _address  local-key _local-key  version _version  retry-count 1)
   (setq handle (tuya:create id address local-key version))
   (unless handle (throw (string "BulbDevice: connect failed to " address)))
   (setq type bulb-type)
@@ -155,32 +164,34 @@
     (map set '(dp-switch dp-mode dp-brightness dp-colourtemp dp-colour) '(20 21 22 23 24))))
 
 (define (BulbDevice:turn-on)
-  (_retry (fn () (tuya:turn-on handle dp-switch))))
+  (set-value dp-switch true))
 
 (define (BulbDevice:turn-off)
-  (_retry (fn () (tuya:turn-off handle dp-switch))))
+  (set-value dp-switch nil))
 
 (define (BulbDevice:set-mode mode)
   "Set mode: \"white\", \"colour\", \"scene\", or \"music\"."
-  (_retry (fn () (tuya:set-value handle dp-mode mode))))
+  (set-value dp-mode mode))
 
 (define (BulbDevice:set-brightness val)
   "Set raw brightness value.  Type B: 10-1000, type A: 25-255."
-  (_retry (fn () (tuya:set-value handle dp-brightness val))))
+  (set-value dp-brightness val))
 
 (define (BulbDevice:set-brightness-pct pct)
   "Set brightness as a percentage (0-100)."
-  (let (v (if (= type "A") (tuya-devices:pct-scale pct 25 255) (tuya-devices:pct-scale pct 10 1000)))
-    (_retry (fn () (tuya:set-value handle dp-brightness v)))))
+  (if (= type "A")
+    (set-value dp-brightness (tuya-devices:pct-scale pct 25 255))
+    (set-value dp-brightness (tuya-devices:pct-scale pct 10 1000))))
 
 (define (BulbDevice:set-colourtemp val)
   "Set raw colour temperature.  Type B: 0-1000, type A: 0-255."
-  (_retry (fn () (tuya:set-value handle dp-colourtemp val))))
+  (set-value dp-colourtemp val))
 
 (define (BulbDevice:set-colourtemp-pct pct)
   "Set colour temperature as a percentage (0-100)."
-  (let (v (if (= type "A") (tuya-devices:pct-scale pct 0 255) (tuya-devices:pct-scale pct 0 1000)))
-    (_retry (fn () (tuya:set-value handle dp-colourtemp v)))))
+  (if (= type "A")
+    (set-value dp-colourtemp (tuya-devices:pct-scale pct 0 255))
+    (set-value dp-colourtemp (tuya-devices:pct-scale pct 0 1000))))
 
 (define (BulbDevice:set-colour r g b)
   "Set colour from RGB values (0-255 each).  Converts to HSV, encodes as hex,
@@ -189,8 +200,8 @@
         hex (if (= type "A")
               (tuya-devices:hsv-hex-a (hsv 0) (hsv 1) (hsv 2))
               (tuya-devices:hsv-hex-b (hsv 0) (hsv 1) (hsv 2))))
-    (_retry (fn () (tuya:set-value handle dp-mode "colour")))
-    (_retry (fn () (tuya:set-value handle dp-colour hex)))))
+    (set-value dp-mode "colour")
+    (set-value dp-colour hex)))
 
 (define (BulbDevice:set-hsv h s v)
   "Set colour from HSV directly.  h=0-360, s and v use device scale
@@ -198,15 +209,14 @@
   (let (hex (if (= type "A")
               (tuya-devices:hsv-hex-a h s v)
               (tuya-devices:hsv-hex-b h s v)))
-    (_retry (fn () (tuya:set-value handle dp-mode "colour")))
-    (_retry (fn () (tuya:set-value handle dp-colour hex)))))
+    (set-value dp-mode "colour")
+    (set-value dp-colour hex)))
 
 (define (BulbDevice:set-white brightness colourtemp)
   "Set white mode with brightness and colour temperature (raw values)."
-  (_retry (fn () (tuya:set-value handle dp-mode "white")))
-  (_retry (fn () (tuya:set-value handle dp-brightness brightness)))
-  (_retry (fn () (tuya:set-value handle dp-colourtemp colourtemp))))
-
+  (set-value dp-mode "white")
+  (set-value dp-brightness brightness)
+  (set-value dp-colourtemp colourtemp))
 
 
 ;; ====================================================================
@@ -232,7 +242,7 @@
 
 (define (CoverDevice:CoverDevice _version _address _id _local-key)
   "Constructor: connect to a cover device."
-  (setq id _id  address _address  local-key _local-key  version _version)
+  (setq id _id  address _address  local-key _local-key  version _version  retry-count 1)
   (setq handle (tuya:create id address local-key version))
   (unless handle (throw (string "CoverDevice: connect failed to " address)))
   (setq cover-type 1))
@@ -242,18 +252,18 @@
   (setq cover-type typ))
 
 (define (CoverDevice:open-cover)
-  (_retry (fn () (tuya:set-value handle 1 (open-cmds cover-type)))))
+  (set-value 1 (open-cmds cover-type)))
 
 (define (CoverDevice:close-cover)
-  (_retry (fn () (tuya:set-value handle 1 (close-cmds cover-type)))))
+  (set-value 1 (close-cmds cover-type)))
 
 (define (CoverDevice:stop-cover)
   (let (cmd (stop-cmds cover-type))
-    (when cmd (_retry (fn () (tuya:set-value handle 1 cmd))))))
+    (when cmd (set-value 1 cmd))))
 
 (define (CoverDevice:set-position pct)
   "Set cover position (0-100).  Uses DP 2."
-  (_retry (fn () (tuya:set-value handle 2 pct))))
+  (set-value 2 pct))
 
 
 ;; ====================================================================
@@ -273,7 +283,7 @@
   "Constructor: connect to a thermostat device.  DP numbers and temp-scale
    (divisor for raw values, e.g. 10 means device sends 720 for 72.0)
    are overridable."
-  (setq id _id  address _address  local-key _local-key  version _version)
+  (setq id _id  address _address  local-key _local-key  version _version  retry-count 1)
   (setq handle (tuya:create id address local-key version))
   (unless handle (throw (string "ThermostatDevice: connect failed to " address)))
   (setq dp-switch _dp-switch)
@@ -283,22 +293,22 @@
   (setq temp-scale _temp-scale))
 
 (define (ThermostatDevice:turn-on)
-  (_retry (fn () (tuya:turn-on handle dp-switch))))
+  (set-value dp-switch true))
 
 (define (ThermostatDevice:turn-off)
-  (_retry (fn () (tuya:turn-off handle dp-switch))))
+  (set-value dp-switch nil))
 
 (define (ThermostatDevice:set-temperature temp)
   "Set target temperature.  Multiplied by temp-scale before sending."
-  (_retry (fn () (tuya:set-value handle dp-target (int (round (mul temp temp-scale) 0))))))
+  (set-value dp-target (int (round (mul temp temp-scale) 0))))
 
 (define (ThermostatDevice:set-mode mode)
   "Set mode: \"heat\", \"cool\", \"auto\", or \"off\"."
-  (_retry (fn () (tuya:set-value handle dp-mode mode))))
+  (set-value dp-mode mode))
 
 (define (ThermostatDevice:get-temperature)
   "Read current temperature from device status.  Returns float or nil."
-  (let (resp (_retry (fn () (tuya:status handle))))
+  (let (resp (status))
     (when resp
       (let (parsed (json-parse resp))
         (when parsed
@@ -322,13 +332,13 @@
 
 (define (SocketDevice:SocketDevice _version _address _id _local-key)
   "Constructor: connect to an energy-monitoring socket device."
-  (setq id _id  address _address  local-key _local-key  version _version)
+  (setq id _id  address _address  local-key _local-key  version _version  retry-count 1)
   (setq handle (tuya:create id address local-key version))
   (unless handle (throw (string "SocketDevice: connect failed to " address))))
 
 (define (SocketDevice:get-energy)
   "Query status and return assoc-list of current (mA), power (W), voltage (V)."
-  (let (resp (_retry (fn () (tuya:status handle))))
+  (let (resp (status))
     (when resp
       (let (parsed (json-parse resp))
         (when parsed
@@ -357,17 +367,17 @@
 
 (define (ClimateDevice:ClimateDevice _version _address _id _local-key)
   "Constructor: connect to a portable AC / climate device."
-  (setq id _id  address _address  local-key _local-key  version _version)
+  (setq id _id  address _address  local-key _local-key  version _version  retry-count 1)
   (setq handle (tuya:create id address local-key version))
   (unless handle (throw (string "ClimateDevice: connect failed to " address))))
 
 (define (ClimateDevice:set-temperature temp)
   "Set target temperature (integer, in device's current unit)."
-  (_retry (fn () (tuya:set-value handle 2 (int temp)))))
+  (set-value 2 (int temp)))
 
 (define (ClimateDevice:get-temperature)
   "Read current room temperature from status.  Returns int or nil."
-  (let (resp (_retry (fn () (tuya:status handle))))
+  (let (resp (status))
     (when resp
       (let (parsed (json-parse resp))
         (when parsed
@@ -376,19 +386,19 @@
 
 (define (ClimateDevice:set-mode mode)
   "Set operating mode: \"cold\", \"hot\", \"wind\", or \"auto\"."
-  (_retry (fn () (tuya:set-value handle 4 mode))))
+  (set-value 4 mode))
 
 (define (ClimateDevice:set-fan-speed speed)
   "Set fan speed: \"1\" (low), \"2\" (medium), \"3\" (high)."
-  (_retry (fn () (tuya:set-value handle 5 speed))))
+  (set-value 5 speed))
 
 (define (ClimateDevice:set-temp-unit unit)
   "Set temperature unit: \"c\" or \"f\"."
-  (_retry (fn () (tuya:set-value handle 19 unit))))
+  (set-value 19 unit))
 
 (define (ClimateDevice:set-timer minutes)
   "Set timer in minutes."
-  (_retry (fn () (tuya:set-value handle 22 (int minutes)))))
+  (set-value 22 (int minutes)))
 
 
 ;; ====================================================================
@@ -404,25 +414,25 @@
 
 (define (DoorbellDevice:DoorbellDevice _version _address _id _local-key)
   "Constructor: connect to a video doorbell device."
-  (setq id _id  address _address  local-key _local-key  version _version)
+  (setq id _id  address _address  local-key _local-key  version _version  retry-count 1)
   (setq handle (tuya:create id address local-key version))
   (unless handle (throw (string "DoorbellDevice: connect failed to " address))))
 
 (define (DoorbellDevice:set-volume vol)
   "Set device volume (1-10).  DP 160."
-  (_retry (fn () (tuya:set-value handle 160 (int vol)))))
+  (set-value 160 (int vol)))
 
 (define (DoorbellDevice:set-motion-switch flag)
   "Enable or disable motion detection alarm.  DP 134."
-  (_retry (fn () (tuya:set-value handle 134 (if flag true nil)))))
+  (set-value 134 (if flag true nil)))
 
 (define (DoorbellDevice:set-indicator flag)
   "Enable or disable status indicator LED.  DP 101."
-  (_retry (fn () (tuya:set-value handle 101 (if flag true nil)))))
+  (set-value 101 (if flag true nil)))
 
 (define (DoorbellDevice:set-motion-sensitivity level)
   "Set motion sensitivity: \"0\" (low), \"1\" (medium), \"2\" (high).  DP 106."
-  (_retry (fn () (tuya:set-value handle 106 level))))
+  (set-value 106 level))
 
 
 ;; ====================================================================
@@ -442,7 +452,7 @@
 (define (IRRemoteControlDevice:IRRemoteControlDevice _version _address _id _local-key (_control-type 2))
   "Constructor: connect to an IR remote control device.
    control-type: 1 (older, DP 201/202) or 2 (newer, DP 1-13)."
-  (setq id _id  address _address  local-key _local-key  version _version)
+  (setq id _id  address _address  local-key _local-key  version _version  retry-count 1)
   (setq handle (tuya:create id address local-key version))
   (unless handle (throw (string "IRRemoteControlDevice: connect failed to " address)))
   (setq control-type _control-type))
@@ -450,29 +460,29 @@
 (define (IRRemoteControlDevice:study-start)
   "Enter study mode (device listens for IR signals from a real remote)."
   (if (= control-type 1)
-    (_retry (fn () (tuya:set-value handle 201 "{\"control\":\"study_exit\"}")))
-    (_retry (fn () (tuya:set-value handle 13 "study")))))
+    (set-value 201 "{\"control\":\"study_exit\"}")
+    (set-value 13 "study")))
 
 (define (IRRemoteControlDevice:study-end)
   "Exit study mode."
   (if (= control-type 1)
-    (_retry (fn () (tuya:set-value handle 201 "{\"control\":\"study_exit\"}")))
-    (_retry (fn () (tuya:set-value handle 13 "study_exit")))))
+    (set-value 201 "{\"control\":\"study_exit\"}")
+    (set-value 13 "study_exit")))
 
 (define (IRRemoteControlDevice:send-button base64-code)
   "Send a learned IR code (base64-encoded)."
   (if (= control-type 1)
-    (_retry (fn () (tuya:set-value handle 201 (string "{\"control\":\"send_ir\",\"key1\":\"" base64-code "\"}"))))
-    (_retry (fn () (tuya:set-value handle 7 base64-code)))))
+    (set-value 201 (string "{\"control\":\"send_ir\",\"key1\":\"" base64-code "\"}"))
+    (set-value 7 base64-code)))
 
 (define (IRRemoteControlDevice:send-key head key)
   "Send an IR head/key pair."
   (if (= control-type 1)
-    (_retry (fn () (tuya:set-value handle 201 (string "{\"control\":\"send_ir\",\"head\":\"" head "\",\"key1\":\"" key "\"}"))))
+    (set-value 201 (string "{\"control\":\"send_ir\",\"head\":\"" head "\",\"key1\":\"" key "\"}"))
     (begin
-      (_retry (fn () (tuya:set-value handle 3 head)))
-      (_retry (fn () (tuya:set-value handle 4 key)))
-      (_retry (fn () (tuya:set-value handle 13 "send"))))))
+      (set-value 3 head)
+      (set-value 4 key)
+      (set-value 13 "send"))))
 
 
 ;; ====================================================================
@@ -495,25 +505,25 @@
 
 (define (InverterHeatPumpDevice:InverterHeatPumpDevice _version _address _id _local-key)
   "Constructor: connect to an inverter heat pump device."
-  (setq id _id  address _address  local-key _local-key  version _version)
+  (setq id _id  address _address  local-key _local-key  version _version  retry-count 1)
   (setq handle (tuya:create id address local-key version))
   (unless handle (throw (string "InverterHeatPumpDevice: connect failed to " address))))
 
 (define (InverterHeatPumpDevice:set-target-temp temp)
   "Set target water temperature (integer, in device's current unit)."
-  (_retry (fn () (tuya:set-value handle 106 (int temp)))))
+  (set-value 106 (int temp)))
 
 (define (InverterHeatPumpDevice:set-silence-mode flag)
   "Enable or disable silence mode."
-  (_retry (fn () (tuya:set-value handle 117 (if flag true nil)))))
+  (set-value 117 (if flag true nil)))
 
 (define (InverterHeatPumpDevice:set-temp-unit unit)
   "Set temperature unit: \"c\" or \"f\"."
-  (_retry (fn () (tuya:set-value handle 103 unit))))
+  (set-value 103 unit))
 
 (define (InverterHeatPumpDevice:get-inlet-temp)
   "Read inlet water temperature from status.  Returns int or nil."
-  (let (resp (_retry (fn () (tuya:status handle))))
+  (let (resp (status))
     (when resp
       (let (parsed (json-parse resp))
         (when parsed
@@ -539,26 +549,26 @@
 
 (define (PresenceDetectorDevice:PresenceDetectorDevice _version _address _id _local-key)
   "Constructor: connect to a presence detector device."
-  (setq id _id  address _address  local-key _local-key  version _version)
+  (setq id _id  address _address  local-key _local-key  version _version  retry-count 1)
   (setq handle (tuya:create id address local-key version))
   (unless handle (throw (string "PresenceDetectorDevice: connect failed to " address))))
 
 (define (PresenceDetectorDevice:set-sensitivity val)
   "Set detection sensitivity (int)."
-  (_retry (fn () (tuya:set-value handle 2 (int val)))))
+  (set-value 2 (int val)))
 
 (define (PresenceDetectorDevice:set-near-detection dist)
   "Set near detection distance in cm."
-  (_retry (fn () (tuya:set-value handle 3 (int dist)))))
+  (set-value 3 (int dist)))
 
 (define (PresenceDetectorDevice:set-far-detection dist)
   "Set far detection distance in cm."
-  (_retry (fn () (tuya:set-value handle 4 (int dist)))))
+  (set-value 4 (int dist)))
 
 (define (PresenceDetectorDevice:set-detection-delay secs)
   "Set detection delay in seconds."
-  (_retry (fn () (tuya:set-value handle 101 (int secs)))))
+  (set-value 101 (int secs)))
 
 (define (PresenceDetectorDevice:set-fading-time secs)
   "Set fading time in seconds."
-  (_retry (fn () (tuya:set-value handle 102 (int secs)))))
+  (set-value 102 (int secs)))

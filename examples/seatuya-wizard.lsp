@@ -23,8 +23,8 @@
 ;   -y          Assume yes to all prompts
 ;
 
-(load (string (env "SEATUYA_LSP_DIR" (real-path "..")) "/seatuya.lsp"))
-(load (string (env "SEATUYA_LSP_DIR" (real-path "..")) "/libtls.lsp"))
+(load (string (or (env "SEATUYA_LSP_DIR") (real-path "..")) "/seatuya.lsp"))
+(load (string (or (env "SEATUYA_LSP_DIR") (real-path "..")) "/libtls.lsp"))
 
 ;; Check that libtls loaded successfully
 (unless tls:available?

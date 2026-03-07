@@ -164,7 +164,7 @@
   (let (ptr (tuya_alloc ver))
     (if (!= ptr 0) ptr nil)))
 
-(define (destroy dev)
+(define (tuya:destroy dev)
   (tuya_destroy dev))
 
 (define (set-credentials dev device-id local-key)
@@ -240,10 +240,10 @@
 (define (generate-payload dev cmd device-id datapoints)
   (consume-cstr (tuya_generate_payload dev cmd device-id (or datapoints ""))))
 
-(define (send dev buf)
+(define (tuya:send dev buf)
   (tuya_send dev buf (length buf)))
 
-(define (receive dev (maxsize BUFSIZE) (minsize 0))
+(define (tuya:receive dev (maxsize BUFSIZE) (minsize 0))
   (let (buf (dup "\000" maxsize)
         n   (tuya_receive dev buf maxsize minsize))
     (if (> n 0) (slice buf 0 n) nil)))

@@ -26,7 +26,7 @@
 ;   -n        dry run — print steps, don't connect
 ;
 
-(load (string (env "SEATUYA_LSP_DIR" (real-path "..")) "/tuya-devices.lsp"))
+(load (string (or (env "SEATUYA_LSP_DIR") (real-path "..")) "/tuya-devices.lsp"))
 
 ;; ----------------------------------------------------------------
 ;;  Inkbird sous vide DPS mapping (ISV-100W / ISV-200W)
