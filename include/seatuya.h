@@ -207,6 +207,19 @@ bool tuya_is_connected(tuya_device_t *dev);
  */
 bool tuya_reconnect(tuya_device_t *dev);
 
+/*
+ * Connection retry settings for high-level round-trip operations.
+ * On socket timeout or network error, round_trip disconnects and
+ * retries up to retry_limit times with retry_delay_ms between
+ * attempts (matching tinytuya's _send_receive behavior).
+ *
+ * Defaults: limit=5, delay=100ms.
+ */
+void tuya_set_retry_limit(tuya_device_t *dev, int limit);
+void tuya_set_retry_delay(tuya_device_t *dev, int delay_ms);
+int tuya_get_retry_limit(tuya_device_t *dev);
+int tuya_get_retry_delay(tuya_device_t *dev);
+
 
 /* ------------------------------------------------------------------ */
 /*  Session negotiation (required for protocol 3.4+)                  */
@@ -382,6 +395,8 @@ void tuya_free_string(char *str);
 
 enum { TUYA_DEFAULT_PORT = 6668 };
 enum { TUYA_RECOMMENDED_BUFSIZE = 1024 };
+enum { TUYA_DEFAULT_RETRY_LIMIT = 5 };
+enum { TUYA_DEFAULT_RETRY_DELAY_MS = 100 };
 
 
 #ifdef __cplusplus

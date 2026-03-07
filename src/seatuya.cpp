@@ -19,6 +19,8 @@ struct tuya_device {
 	char *device_id;
 	char *local_key;
 	char *ip;
+	int retry_limit;
+	int retry_delay_ms;
 	unsigned char buf[TUYA_RECOMMENDED_BUFSIZE];
 };
 
@@ -78,6 +80,8 @@ tuya_alloc(const char *version)
 		return NULL;
 	}
 	dev->api = api;
+	dev->retry_limit = TUYA_DEFAULT_RETRY_LIMIT;
+	dev->retry_delay_ms = TUYA_DEFAULT_RETRY_DELAY_MS;
 	return dev;
 }
 
@@ -186,6 +190,32 @@ tuya_is_connected(tuya_device_t *dev)
 	if (!dev)
 		return false;
 	return dev->api->isConnected();
+}
+
+extern "C" void
+tuya_set_retry_limit(tuya_device_t *dev, int limit)
+{
+	if (dev)
+		dev->retry_limit = limit;
+}
+
+extern "C" void
+tuya_set_retry_delay(tuya_device_t *dev, int delay_ms)
+{
+	if (dev)
+		dev->retry_delay_ms = delay_ms;
+}
+
+extern "C" int
+tuya_get_retry_limit(tuya_device_t *dev)
+{
+	return dev ? dev->retry_limit : 0;
+}
+
+extern "C" int
+tuya_get_retry_delay(tuya_device_t *dev)
+{
+	return dev ? dev->retry_delay_ms : 0;
 }
 
 
@@ -405,6 +435,10 @@ tuya_receive(tuya_device_t *dev, unsigned char *buf,
 /*
  * Internal helper: generate payload, build message, send, receive,
  * decode.  Returns malloc'd JSON string or NULL.
+ *
+ * On socket timeout or network error, closes the connection and
+ * retries up to dev->retry_limit times (matching tinytuya's
+ * _send_receive() behavior).
  */
 static char *
 round_trip(tuya_device_t *dev, enum tuya_command cmd,
@@ -414,36 +448,51 @@ round_trip(tuya_device_t *dev, enum tuya_command cmd,
 		return NULL;
 
 	std::string dp = dps_json ? std::string(dps_json) : std::string();
+	std::string key(dev->local_key);
+	std::string id(dev->device_id);
+
 	std::string payload_str = dev->api->GeneratePayload(
-	    (uint8_t)cmd, std::string(dev->device_id), dp);
+	    (uint8_t)cmd, id, dp);
 	if (payload_str.empty())
 		return NULL;
 
-	int len = dev->api->BuildTuyaMessage(dev->buf, (uint8_t)cmd,
-	              payload_str, std::string(dev->local_key));
-	if (len < 0)
-		return NULL;
+	int retries = 0;
+	for (;;) {
+		int len = dev->api->BuildTuyaMessage(dev->buf, (uint8_t)cmd,
+		              payload_str, key);
+		if (len < 0)
+			return NULL;
 
-	int n = dev->api->send(dev->buf, len);
-	if (n < 0)
-		return NULL;
+		int n = dev->api->send(dev->buf, len);
+		if (n >= 0) {
+			usleep(200000);
+			n = dev->api->receive(dev->buf,
+			        TUYA_RECOMMENDED_BUFSIZE, 30);
+			if (n > 0) {
+				std::string result =
+				    dev->api->DecodeTuyaMessage(
+				        dev->buf, n, key);
+				if (!result.empty()) {
+					char *out = (char *)malloc(
+					    result.size() + 1);
+					if (!out)
+						return NULL;
+					memcpy(out, result.c_str(),
+					    result.size() + 1);
+					return out;
+				}
+			}
+		}
 
-	usleep(200000);
-
-	n = dev->api->receive(dev->buf, TUYA_RECOMMENDED_BUFSIZE, 30);
-	if (n <= 0)
-		return NULL;
-
-	std::string result = dev->api->DecodeTuyaMessage(
-	    dev->buf, n, std::string(dev->local_key));
-	if (result.empty())
-		return NULL;
-
-	char *out = (char *)malloc(result.size() + 1);
-	if (!out)
-		return NULL;
-	memcpy(out, result.c_str(), result.size() + 1);
-	return out;
+		/* send or receive failed -- retry? */
+		if (retries >= dev->retry_limit)
+			return NULL;
+		retries++;
+		dev->api->disconnect();
+		usleep(dev->retry_delay_ms * 1000);
+		if (!tuya_reconnect(dev))
+			return NULL;
+	}
 }
 
 extern "C" char *

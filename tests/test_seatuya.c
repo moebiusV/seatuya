@@ -170,6 +170,44 @@ test_high_level_null_safety(void)
 }
 
 static void
+test_retry_settings(void)
+{
+	tuya_device_t *dev = tuya_alloc("3.3");
+	if (!dev) {
+		printf("  SKIP: could not create device\n");
+		return;
+	}
+
+	check("default retry limit is 5",
+	      tuya_get_retry_limit(dev) == TUYA_DEFAULT_RETRY_LIMIT);
+	check("default retry delay is 100",
+	      tuya_get_retry_delay(dev) == TUYA_DEFAULT_RETRY_DELAY_MS);
+
+	tuya_set_retry_limit(dev, 3);
+	check("retry limit set to 3",
+	      tuya_get_retry_limit(dev) == 3);
+
+	tuya_set_retry_delay(dev, 200);
+	check("retry delay set to 200",
+	      tuya_get_retry_delay(dev) == 200);
+
+	tuya_set_retry_limit(dev, 0);
+	check("retry limit set to 0 (disabled)",
+	      tuya_get_retry_limit(dev) == 0);
+
+	/* NULL safety */
+	check("get_retry_limit(NULL) returns 0",
+	      tuya_get_retry_limit(NULL) == 0);
+	check("get_retry_delay(NULL) returns 0",
+	      tuya_get_retry_delay(NULL) == 0);
+	tuya_set_retry_limit(NULL, 10);
+	tuya_set_retry_delay(NULL, 500);
+	check("set_retry on NULL: no crash", 1);
+
+	tuya_destroy(dev);
+}
+
+static void
 test_null_safety(void)
 {
 	/* None of these should crash */
@@ -214,6 +252,9 @@ main(void)
 
 	printf("\nhigh-level null safety:\n");
 	test_high_level_null_safety();
+
+	printf("\nretry settings:\n");
+	test_retry_settings();
 
 	printf("\nnull safety:\n");
 	test_null_safety();

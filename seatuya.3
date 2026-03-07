@@ -31,6 +31,14 @@ seatuya \- C library for local control of Tuya smart devices
 .br
 .BI "bool tuya_reconnect(tuya_device_t *" dev ");"
 .PP
+.BI "void tuya_set_retry_limit(tuya_device_t *" dev ", int " limit ");"
+.br
+.BI "void tuya_set_retry_delay(tuya_device_t *" dev ", int " delay_ms ");"
+.br
+.BI "int tuya_get_retry_limit(tuya_device_t *" dev ");"
+.br
+.BI "int tuya_get_retry_delay(tuya_device_t *" dev ");"
+.PP
 .BI "bool tuya_negotiate_session(tuya_device_t *" dev ", const char *" key ");"
 .br
 .BI "bool tuya_negotiate_session_start(tuya_device_t *" dev ", const char *" key ");"
@@ -161,6 +169,25 @@ For 3.1 and 3.3, session negotiation is a no-op.
 re-establishes a dropped connection using the stored IP and
 local_key.  For protocol 3.4+, it also re-negotiates the session.
 If already connected, it returns immediately.
+.SS Connection retry
+All high-level round-trip operations
+.RB ( tuya_set_value_bool (),
+.BR tuya_status (),
+etc.) automatically retry on socket timeout or network error:
+disconnect, wait, reconnect, and resend the same message.
+This matches tinytuya's
+.B _send_receive()
+behavior.
+.PP
+.BR tuya_set_retry_limit ()
+sets the maximum number of retries (default 5).
+.BR tuya_set_retry_delay ()
+sets the delay between retries in milliseconds (default 100).
+.BR tuya_get_retry_limit ()
+and
+.BR tuya_get_retry_delay ()
+return the current settings.
+Setting the retry limit to 0 disables retry.
 .SS High-level operations
 .BR tuya_set_value_bool (),
 .BR tuya_set_value_int (),
@@ -396,6 +423,12 @@ round-trip operations.
 .TP
 .B TUYA_RECOMMENDED_BUFSIZE
 1024 bytes.
+.TP
+.B TUYA_DEFAULT_RETRY_LIMIT
+5 (number of reconnect attempts on transport failure).
+.TP
+.B TUYA_DEFAULT_RETRY_DELAY_MS
+100 (milliseconds between retry attempts).
 .SH SEE ALSO
 .BR tuyapp (3)
 .SH AUTHORS

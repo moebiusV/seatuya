@@ -31,6 +31,10 @@
 (import LIB "tuya_disconnect")
 (import LIB "tuya_is_connected")
 (import LIB "tuya_reconnect")
+(import LIB "tuya_set_retry_limit")
+(import LIB "tuya_set_retry_delay")
+(import LIB "tuya_get_retry_limit")
+(import LIB "tuya_get_retry_delay")
 (import LIB "tuya_negotiate_session")
 (import LIB "tuya_negotiate_session_start")
 (import LIB "tuya_negotiate_session_finalize")
@@ -193,6 +197,18 @@
 
 (define (reconnect dev)
   (bool? (tuya_reconnect dev)))
+
+(define (set-retry-limit dev limit)
+  (tuya_set_retry_limit dev limit))
+
+(define (set-retry-delay dev delay-ms)
+  (tuya_set_retry_delay dev delay-ms))
+
+(define (get-retry-limit dev)
+  (tuya_get_retry_limit dev))
+
+(define (get-retry-delay dev)
+  (tuya_get_retry_delay dev))
 
 (define (negotiate-session dev local-key)
   (bool? (tuya_negotiate_session dev local-key)))

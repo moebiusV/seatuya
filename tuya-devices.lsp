@@ -71,10 +71,8 @@
 ;; Constructor stores id, address, local-key, version as context
 ;; variables so they are accessible as d:id, d:address, etc.
 ;;
-;; All round-trip methods auto-reconnect on failure (matching tinytuya).
-;; Configurable via retry-count (default 1, like tinytuya).
-;; Subclass methods call inherited set-value/turn-on/status to get
-;; retry for free -- no need to wrap each call individually.
+;; Connection retry lives in the C transport layer (like tinytuya's
+;; _send_receive), not here.  These methods are simple pass-throughs.
 
 (context 'TuyaDevice)
 
@@ -84,33 +82,23 @@
   (setq address _address)
   (setq local-key _local-key)
   (setq version _version)
-  (setq retry-count 1)
   (setq handle (tuya:create id address local-key version))
   (unless handle (throw (string "TuyaDevice: connect failed to " address))))
 
-(define (TuyaDevice:_retry func)
-  "Call func.  On nil result, reconnect and retry up to retry-count times."
-  (let (result (func) tries 0)
-    (while (and (not result) (< tries retry-count))
-      (inc tries)
-      (when (tuya:reconnect handle)
-        (setq result (func))))
-    result))
-
 (define (TuyaDevice:turn-on (dp 1))
-  (_retry (fn () (tuya:turn-on handle dp))))
+  (tuya:turn-on handle dp))
 
 (define (TuyaDevice:turn-off (dp 1))
-  (_retry (fn () (tuya:turn-off handle dp))))
+  (tuya:turn-off handle dp))
 
 (define (TuyaDevice:set-value dp val)
-  (_retry (fn () (tuya:set-value handle dp val))))
+  (tuya:set-value handle dp val))
 
 (define (TuyaDevice:status)
-  (_retry (fn () (tuya:status handle))))
+  (tuya:status handle))
 
 (define (TuyaDevice:heartbeat)
-  (_retry (fn () (tuya:heartbeat handle))))
+  (tuya:heartbeat handle))
 
 (define (TuyaDevice:reconnect)
   (tuya:reconnect handle))
@@ -132,7 +120,7 @@
 
 (define (OutletDevice:OutletDevice _version _address _id _local-key)
   "Constructor: connect to an outlet device."
-  (setq id _id  address _address  local-key _local-key  version _version  retry-count 1)
+  (setq id _id  address _address  local-key _local-key  version _version)
   (setq handle (tuya:create id address local-key version))
   (unless handle (throw (string "OutletDevice: connect failed to " address))))
 
@@ -155,7 +143,7 @@
 
 (define (BulbDevice:BulbDevice _version _address _id _local-key (bulb-type "B"))
   "Constructor: connect to a bulb device.  bulb-type: \"A\" or \"B\" (default)."
-  (setq id _id  address _address  local-key _local-key  version _version  retry-count 1)
+  (setq id _id  address _address  local-key _local-key  version _version)
   (setq handle (tuya:create id address local-key version))
   (unless handle (throw (string "BulbDevice: connect failed to " address)))
   (setq type bulb-type)
@@ -242,7 +230,7 @@
 
 (define (CoverDevice:CoverDevice _version _address _id _local-key)
   "Constructor: connect to a cover device."
-  (setq id _id  address _address  local-key _local-key  version _version  retry-count 1)
+  (setq id _id  address _address  local-key _local-key  version _version)
   (setq handle (tuya:create id address local-key version))
   (unless handle (throw (string "CoverDevice: connect failed to " address)))
   (setq cover-type 1))
@@ -283,7 +271,7 @@
   "Constructor: connect to a thermostat device.  DP numbers and temp-scale
    (divisor for raw values, e.g. 10 means device sends 720 for 72.0)
    are overridable."
-  (setq id _id  address _address  local-key _local-key  version _version  retry-count 1)
+  (setq id _id  address _address  local-key _local-key  version _version)
   (setq handle (tuya:create id address local-key version))
   (unless handle (throw (string "ThermostatDevice: connect failed to " address)))
   (setq dp-switch _dp-switch)
@@ -332,7 +320,7 @@
 
 (define (SocketDevice:SocketDevice _version _address _id _local-key)
   "Constructor: connect to an energy-monitoring socket device."
-  (setq id _id  address _address  local-key _local-key  version _version  retry-count 1)
+  (setq id _id  address _address  local-key _local-key  version _version)
   (setq handle (tuya:create id address local-key version))
   (unless handle (throw (string "SocketDevice: connect failed to " address))))
 
@@ -367,7 +355,7 @@
 
 (define (ClimateDevice:ClimateDevice _version _address _id _local-key)
   "Constructor: connect to a portable AC / climate device."
-  (setq id _id  address _address  local-key _local-key  version _version  retry-count 1)
+  (setq id _id  address _address  local-key _local-key  version _version)
   (setq handle (tuya:create id address local-key version))
   (unless handle (throw (string "ClimateDevice: connect failed to " address))))
 
@@ -414,7 +402,7 @@
 
 (define (DoorbellDevice:DoorbellDevice _version _address _id _local-key)
   "Constructor: connect to a video doorbell device."
-  (setq id _id  address _address  local-key _local-key  version _version  retry-count 1)
+  (setq id _id  address _address  local-key _local-key  version _version)
   (setq handle (tuya:create id address local-key version))
   (unless handle (throw (string "DoorbellDevice: connect failed to " address))))
 
@@ -452,7 +440,7 @@
 (define (IRRemoteControlDevice:IRRemoteControlDevice _version _address _id _local-key (_control-type 2))
   "Constructor: connect to an IR remote control device.
    control-type: 1 (older, DP 201/202) or 2 (newer, DP 1-13)."
-  (setq id _id  address _address  local-key _local-key  version _version  retry-count 1)
+  (setq id _id  address _address  local-key _local-key  version _version)
   (setq handle (tuya:create id address local-key version))
   (unless handle (throw (string "IRRemoteControlDevice: connect failed to " address)))
   (setq control-type _control-type))
@@ -505,7 +493,7 @@
 
 (define (InverterHeatPumpDevice:InverterHeatPumpDevice _version _address _id _local-key)
   "Constructor: connect to an inverter heat pump device."
-  (setq id _id  address _address  local-key _local-key  version _version  retry-count 1)
+  (setq id _id  address _address  local-key _local-key  version _version)
   (setq handle (tuya:create id address local-key version))
   (unless handle (throw (string "InverterHeatPumpDevice: connect failed to " address))))
 
@@ -549,7 +537,7 @@
 
 (define (PresenceDetectorDevice:PresenceDetectorDevice _version _address _id _local-key)
   "Constructor: connect to a presence detector device."
-  (setq id _id  address _address  local-key _local-key  version _version  retry-count 1)
+  (setq id _id  address _address  local-key _local-key  version _version)
   (setq handle (tuya:create id address local-key version))
   (unless handle (throw (string "PresenceDetectorDevice: connect failed to " address))))
 
