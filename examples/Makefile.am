@@ -1,8 +1,8 @@
-noinst_PROGRAMS = sousvide-ramp seatuya-wizard-openssl tuyaprobe
+noinst_PROGRAMS = sousctl seatuya-wizard-openssl tuyaprobe
 
-sousvide_ramp_SOURCES = sousvide-ramp.c
-sousvide_ramp_CFLAGS = -I$(top_srcdir)/include
-sousvide_ramp_LDADD = $(top_builddir)/src/libseatuya.la -lm
+sousctl_SOURCES = sousctl.c
+sousctl_CFLAGS = -I$(top_srcdir)/include
+sousctl_LDADD = $(top_builddir)/src/libseatuya.la -lm
 
 tuyaprobe_SOURCES = tuyaprobe.c
 tuyaprobe_CFLAGS = -I$(top_srcdir)/include
