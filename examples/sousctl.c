@@ -117,6 +117,7 @@ struct config {
 	char device_id[128];
 	char local_key[128];
 	char ip[256];
+	char mac[24];
 	char version[8];
 };
 
@@ -166,6 +167,8 @@ read_config(const char *path, struct config *cfg)
 			strncpy(cfg->local_key, val, sizeof(cfg->local_key) - 1);
 		else if (strcmp(key, "ip") == 0)
 			strncpy(cfg->ip, val, sizeof(cfg->ip) - 1);
+		else if (strcmp(key, "mac") == 0)
+			strncpy(cfg->mac, val, sizeof(cfg->mac) - 1);
 		else if (strcmp(key, "version") == 0)
 			strncpy(cfg->version, val, sizeof(cfg->version) - 1);
 	}
@@ -194,6 +197,161 @@ progname(const char *argv0)
 
 static double c_to_f(double c) { return c * 9.0 / 5.0 + 32.0; }
 static double f_to_c(double f) { return (f - 32.0) * 5.0 / 9.0; }
+
+/*
+ * Normalise a MAC address string to a compact hex form for comparison.
+ * "00:33:7a:78:47:28" and "00-33-7A-78-47-28" both become
+ * "00337a784728".
+ */
+static void
+mac_normalise(const char *raw, char *out, size_t outsz)
+{
+	out[0] = '\0';
+	for (const char *p = raw; *p && (size_t)(out - out + strlen(out)) < outsz - 1; p++)
+		if (*p != ':' && *p != '-' && *p != ' ' && *p != '\t')
+			out[strlen(out)] = (char)tolower((unsigned char)*p);
+}
+
+/*
+ * Match a line of `arp -a` output against a normalised MAC.
+ * Format varies by OS:
+ *   macOS/BSDs: ? (192.168.1.131) at 00:33:7a:78:47:28 on en0 ...
+ *   Windows:    192.168.1.131        00-33-7a-78-47-28     dynamic
+ * Also handles the /proc/net/arp format for Linux native.
+ */
+static bool
+arp_line_match(const char *line, const char *mac_norm, char *ip_out, size_t ipsz)
+{
+	char ip[64] = {0}, hw[64] = {0}, hw_norm[48] = {0};
+	int n;
+
+	/* /proc/net/arp format: IP hw_type flags HW_addr mask device */
+	n = sscanf(line, "%63s %*s %*s %63s", ip, hw);
+	if (n == 2 && ip[0] && hw[0]) {
+		mac_normalise(hw, hw_norm, sizeof(hw_norm));
+		if (strcmp(mac_norm, hw_norm) == 0) {
+			strncpy(ip_out, ip, ipsz - 1);
+			return true;
+		}
+	}
+
+	/* Windows `arp -a` format: IP  HW-addr  type */
+	n = sscanf(line, "%63s %63s %*s", ip, hw);
+	if (n == 2 && strchr(hw, '-') && ip[0]) {
+		mac_normalise(hw, hw_norm, sizeof(hw_norm));
+		if (strcmp(mac_norm, hw_norm) == 0) {
+			strncpy(ip_out, ip, ipsz - 1);
+			return true;
+		}
+	}
+
+	/* macOS/BSD `arp -a` format: ? (ip) at hw on if */
+	{
+		const char *lp = strchr(line, '(');
+		if (lp) {
+			lp++;
+			const char *rp = strchr(lp, ')');
+			if (rp && rp > lp) {
+				size_t len = (size_t)(rp - lp);
+				if (len < sizeof(ip)) {
+					memcpy(ip, lp, len);
+					ip[len] = '\0';
+				}
+			}
+		}
+		if (ip[0]) {
+			const char *at = strstr(line, " at ");
+			if (at) {
+				at += 4;
+				sscanf(at, "%63s", hw);
+				mac_normalise(hw, hw_norm, sizeof(hw_norm));
+				if (strcmp(mac_norm, hw_norm) == 0) {
+					strncpy(ip_out, ip, ipsz - 1);
+					return true;
+				}
+			}
+		}
+	}
+
+	return false;
+}
+
+/*
+ * Resolve a MAC address to an IP using the system ARP table.
+ * Tries /proc/net/arp (Linux native), then `arp -a` (BSDs/macOS),
+ * then powershell.exe arp -a (WSL2).  On WSL2, /proc/net/arp only
+ * shows virtual interfaces, not the Windows host's LAN.
+ */
+static bool
+resolve_mac(struct config *cfg)
+{
+	char mac_norm[32];
+	FILE *fp;
+	char line[512];
+
+	if (!cfg->mac[0])
+		return false;
+
+	mac_normalise(cfg->mac, mac_norm, sizeof(mac_norm));
+
+	/* 1. /proc/net/arp — Linux native, and WSL2 virtual iface */
+	fp = fopen("/proc/net/arp", "r");
+	if (fp) {
+		fgets(line, sizeof(line), fp); /* skip header */
+		while (fgets(line, sizeof(line), fp)) {
+			if (arp_line_match(line, mac_norm, cfg->ip,
+			    sizeof(cfg->ip))) {
+				vlog("MAC %s -> %s (/proc/net/arp)\n",
+				    cfg->mac, cfg->ip);
+				fclose(fp);
+				return true;
+			}
+		}
+		fclose(fp);
+	}
+
+	/* 2. `arp -a` — macOS, FreeBSD, OpenBSD, NetBSD, native Linux */
+	fp = popen("arp -a 2>/dev/null", "r");
+	if (fp) {
+		while (fgets(line, sizeof(line), fp)) {
+			if (arp_line_match(line, mac_norm, cfg->ip,
+			    sizeof(cfg->ip))) {
+				vlog("MAC %s -> %s (arp -a)\n",
+				    cfg->mac, cfg->ip);
+				pclose(fp);
+				return true;
+			}
+		}
+		pclose(fp);
+	}
+
+	/* 3. WSL2: powershell.exe arp -a for Windows host's LAN */
+#ifdef __linux__
+	{
+		/* Detect WSL by checking for /proc/sys/fs/binfmt_misc/WSLInterop */
+		bool is_wsl = (access("/proc/sys/fs/binfmt_misc/WSLInterop",
+		    F_OK) == 0);
+		if (is_wsl) {
+			fp = popen(
+			    "powershell.exe -c \"arp -a\" 2>/dev/null", "r");
+			if (fp) {
+				while (fgets(line, sizeof(line), fp)) {
+					if (arp_line_match(line, mac_norm,
+					    cfg->ip, sizeof(cfg->ip))) {
+						vlog("MAC %s -> %s (Win32 ARP)\n",
+						    cfg->mac, cfg->ip);
+						pclose(fp);
+						return true;
+					}
+				}
+				pclose(fp);
+			}
+		}
+	}
+#endif
+
+	return false;
+}
 
 static int
 parse_temp(const char *s, bool *ok)
@@ -495,8 +653,11 @@ main(int argc, char **argv)
 
 	struct config cfg;
 	if (read_config(config_path, &cfg) != 0) return 1;
-	if (override_ip[0])
+	if (override_ip[0]) {
 		strncpy(cfg.ip, override_ip, sizeof(cfg.ip) - 1);
+	} else if (cfg.mac[0]) {
+		resolve_mac(&cfg);
+	}
 
 	/* Build phase list from the SoX-style command chain */
 	struct phase *phases = NULL;
