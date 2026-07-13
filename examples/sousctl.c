@@ -2,7 +2,7 @@
  * sousctl ("sue kettle") — Local Tuya controller for Inkbird sous vide.
  *
  * Usage:
- *   sousctl [-v] [-n] [-c FILE] COMMAND [ARGS] [COMMAND [ARGS]] ...
+ *   sousctl [-v] [-n] [-c FILE] [-i IP] COMMAND [ARGS] [COMMAND [ARGS]] ...
  *
  * Commands chain SoX-style: each command consumes its own arguments,
  * then the next word is the next command.
@@ -56,6 +56,7 @@
 
 static bool verbose = false;
 static tuya_device_t *atexit_dev = NULL;
+static char override_ip[256] = {0};
 
 static void
 vlog(const char *fmt, ...)
@@ -447,6 +448,7 @@ usage(const char *prog)
 "\n"
 "Global options:\n"
 "  -c FILE    config file path\n"
+"  -i IP      override device IP address\n"
 "  -n         dry run (print schedule, no device connection)\n"
 "  -v         verbose (timestamped log to stderr)\n",
 	    prog, prog, prog, prog);
@@ -475,10 +477,12 @@ main(int argc, char **argv)
 			    getenv("HOME") ? getenv("HOME") : ".");
 	}
 
-	while ((opt = getopt(argc, argv, "+c:nhv")) != -1) {
+	while ((opt = getopt(argc, argv, "+c:i:nhv")) != -1) {
 		switch (opt) {
 		case 'c': strncpy(config_path, optarg,
 			    sizeof(config_path) - 1); break;
+		case 'i': strncpy(override_ip, optarg,
+			    sizeof(override_ip) - 1); break;
 		case 'n': dry_run = true; break;
 		case 'v': verbose = true; break;
 		default:
@@ -491,6 +495,8 @@ main(int argc, char **argv)
 
 	struct config cfg;
 	if (read_config(config_path, &cfg) != 0) return 1;
+	if (override_ip[0])
+		strncpy(cfg.ip, override_ip, sizeof(cfg.ip) - 1);
 
 	/* Build phase list from the SoX-style command chain */
 	struct phase *phases = NULL;
