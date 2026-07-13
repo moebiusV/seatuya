@@ -470,7 +470,7 @@ tuya_generate_payload(tuya_device_t *dev,
 		return NULL;
 
 	std::string dp = datapoints ? std::string(datapoints) : std::string();
-	std::string result = gen_payload(cmd,
+	std::string result = dev->api->GeneratePayload((uint8_t)cmd,
 	                         std::string(device_id), dp);
 	if (result.empty())
 		return NULL;
@@ -561,7 +561,7 @@ round_trip(tuya_device_t *dev, enum tuya_command cmd,
 			cmd = TUYA_CMD_CONTROL_NEW;
 	}
 
-	std::string payload_str = gen_payload(cmd, id, dp);
+	std::string payload_str = dev->api->GeneratePayload((uint8_t)cmd, id, dp);
 	if (payload_str.empty())
 		return NULL;
 
