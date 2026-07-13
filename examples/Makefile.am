@@ -1,3 +1,5 @@
+AM_LDFLAGS = -Wl,-rpath,$(abs_top_builddir)/src/.libs
+
 noinst_PROGRAMS = sousctl seatuya-wizard-openssl tuyaprobe
 
 sousctl_SOURCES = sousctl.c

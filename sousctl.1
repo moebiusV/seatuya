@@ -1,0 +1,133 @@
+.TH SOUSCTL 1 "2026-07-13" "seatuya 0.2.0" "User Commands"
+.SH NAME
+sousctl \- local Tuya controller for Inkbird sous vide cookers
+.SH SYNOPSIS
+.B sousctl
+[\fB\-v\fR] [\fB\-n\fR] [\fB\-c\fR \fIFILE\fR] [\fB\-i\fR \fIIP\fR]
+\fICOMMAND\fR [\fIARGS\fR] [\fICOMMAND\fR [\fIARGS\fR]] ...
+.SH DESCRIPTION
+.B sousctl
+controls an Inkbird sous vide cooker over the local network using the
+Tuya protocol.  It reads device credentials from
+\fB$XDG_CONFIG_HOME/seatuya/config\fR (defaults to
+\fB~/.config/seatuya/config\fR), an INI-style file with a
+\fB[sousvide]\fR section containing
+.IR device_id ,
+.IR local_key ,
+.IR ip ,
+and
+.IR version .
+.PP
+Commands chain SoX-style: each command consumes its own arguments,
+then the next word is the next command.  Power-off is implicit at the
+end of every chain and on crash or interrupt.
+.SH OPTIONS
+.TP
+\fB\-v\fR
+Verbose.  Prints timestamped action log to standard error.
+.TP
+\fB\-n\fR
+Dry run.  Prints the schedule without connecting to the device.
+.TP
+\fB\-c\fR \fIFILE\fR
+Path to the config file (default:
+.IR ~/.config/seatuya/config ).
+.TP
+\fB\-i\fR \fIIP\fR
+Override the device IP address from the config file.
+.SH COMMANDS
+.TP
+.B status
+Connect, read all data points, display them in human-readable form,
+and disconnect.  Does not modify device state.
+.TP
+.B read
+Connect, read the current temperature (DP 104), print it in
+both Celsius and Fahrenheit, and disconnect.
+.TP
+\fBtemp\fR \fITEMP\fR
+Set the target temperature.  Connects, sends the value,
+disconnects.  Does not power on the device.
+.TP
+\fBramp\fR \fISTART\fR \fIEND\fR \fITIME\fR
+Linear temperature ramp.  The target is adjusted once per minute
+from
+.I START
+to
+.I END
+over the given
+.IR TIME .
+If
+.I START
+equals
+.I END
+this is a hold.
+.TP
+\fBhold\fR \fITEMP\fR \fITIME\fR
+Hold at
+.I TEMP
+for
+.IR TIME .
+Equivalent to
+.B ramp
+with equal start and end.
+.TP
+.B off
+Power off the device.  (Implicit at end of every chain.)
+.SH TEMPERATURE FORMAT
+Temperature arguments accept an optional unit suffix.
+The default unit is Celsius.
+.RS
+.PP
+\fI50C\fR   50 degrees Celsius
+.br
+\fI122F\fR  122 degrees Fahrenheit
+.br
+\fI37.5\fR  37.5 degrees Celsius (bare number)
+.RE
+.SH TIME FORMAT
+Duration arguments accept several forms.
+.RS
+.PP
+\fI45\fR      45 minutes (bare integer)
+.br
+\fI5:00\fR    5 minutes, 0 seconds (M:SS)
+.br
+\fI1:30:00\fR 1 hour, 30 minutes, 0 seconds (HH:MM:SS)
+.RE
+.SH EXAMPLES
+.nf
+\fBsousctl status\fR
+\fBsousctl read\fR
+\fBsousctl temp 55C\fR
+\fBsousctl ramp 25C 50C 30:00 hold 50C 30:00\fR
+\fBsousctl -v ramp 25C 50C 30:00 hold 50C 30:00\fR
+\fBsousctl -n ramp 20C 85C 60:00\fR
+\fBsousctl -c ~/.config/seatuya/beach status\fR
+\fBsousctl -i 192.168.1.200 status\fR
+\fBsousctl off\fR
+.fi
+.SH FILES
+.TP
+.I ~/.config/seatuya/config
+Default device credentials.
+.TP
+.I $XDG_CONFIG_HOME/seatuya/config
+XDG-compliant location, checked first.
+.SH SIGNALS
+.B sousctl
+installs handlers for
+.B SIGINT
+and
+.B SIGTERM
+that power off the device before exiting.  An
+.B atexit(3)
+handler provides a second layer of protection for normal exit paths.
+.SH SEE ALSO
+.BR seatuya (3),
+.BR tinytuya (1),
+.BR sousvide-ramp.lsp (1)
+.SH AUTHORS
+David Walther <\fIdavid@clearbrookdistillery.com\fR>.
+.SH LICENSE
+BSD 2-Clause.

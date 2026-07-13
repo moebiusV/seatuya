@@ -115,16 +115,37 @@ different niche: a C ABI that any language can call.
 
 | File | Description |
 |------|-------------|
-| `sousvide-ramp` | temperature ramp controller for Inkbird sous vide devices |
+| `sousctl` | local Tuya controller for Inkbird sous vide (multi-phase ramp, status, verbose mode, atexit safety) |
 | `seatuya-wizard` | cloud wizard (libtls backend) |
 | `seatuya-wizard-openssl` | cloud wizard (OpenSSL backend) |
+| `tuyaprobe` | transport-level diagnostic: determines whether anything reads port 6668 |
+| `tuyascan` | zero-dependency UDP broadcast scanner (also cross-compiles for Windows) |
 
 **Example programs (newLISP):**
 
 | File | Description |
 |------|-------------|
-| `sousvide-ramp.lsp` | same ramp controller, pure newLISP via FFI |
+| `sousvide-ramp.lsp` | ramp controller, pure newLISP via FFI |
 | `seatuya-wizard.lsp` | full tinytuya wizard clone in newLISP |
+
+### sousctl — Local sous vide controller
+
+`sousctl` controls an Inkbird sous vide directly over TCP with no cloud
+dependency.  Commands chain SoX-style:
+
+```
+sousctl status                           # all data points
+sousctl read                             # current temperature
+sousctl temp 55C                         # set target
+sousctl ramp 25C 50C 30:00 hold 50C 30:00  # ramp + hold
+sousctl -v ramp 25C 50C 30:00 hold 50C 30:00  # verbose with timestamps
+sousctl -n ramp 20C 85C 60:00            # dry run
+sousctl off                              # power off
+```
+
+Power-off is implicit at the end of every chain and on crash/interrupt.
+Temperatures accept `C` or `F` suffix (default Celsius).  Times accept
+`M:SS`, `HH:MM:SS`, or bare minutes.  See `sousctl(1)`.
 
 **Distribution packaging:**
 
