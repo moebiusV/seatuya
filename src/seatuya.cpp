@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <string>
 #include <unistd.h>
 
@@ -21,6 +22,16 @@ struct tuya_device {
 	char *ip;
 	int retry_limit;
 	int retry_delay_ms;
+	/*
+	 * device22: firmware found on many devices with 22-character
+	 * device ids.  Reports protocol 3.3 but ignores DP_QUERY (10)
+	 * and CONTROL (7); status must be requested with CONTROL_NEW
+	 * (13) carrying a null-valued DP map, and writes must also use
+	 * CONTROL_NEW.  Enabled explicitly via tuya_set_device22()
+	 * (auto-detection misfires; see tuya-local's "3.22").
+	 */
+	bool device22;
+	char *dps_map;          /* e.g. {"101":null,"102":null,...}   */
 	unsigned char buf[TUYA_RECOMMENDED_BUFSIZE];
 };
 
@@ -94,6 +105,7 @@ tuya_destroy(tuya_device_t *dev)
 	free(dev->device_id);
 	free(dev->local_key);
 	free(dev->ip);
+	free(dev->dps_map);
 	free(dev);
 }
 
@@ -353,6 +365,71 @@ tuya_set_session_ready(tuya_device_t *dev)
 /*  Message building and decoding                                     */
 /* ------------------------------------------------------------------ */
 
+/*
+ * Native payload generation.
+ *
+ * tuyapp's tuyaAPI::GeneratePayload() substitutes @devid@/@dps@/@now@
+ * with std::string::replace() at hardcoded byte offsets.  For a
+ * 22-character device id the HEART_BEAT template's offsets are wrong
+ * and the result is malformed JSON (the '@' survives and the closing
+ * quotes are consumed).  A malformed inner payload is encrypted into
+ * a valid 3.3 frame, so the device silently drops it -- which is
+ * indistinguishable from a wrong-key drop and defeats heartbeat as a
+ * key oracle.
+ *
+ * This replacement does token search-and-replace, so it is correct
+ * for any device id length and cannot drift.  It is used in place of
+ * dev->api->GeneratePayload() everywhere in the shim, so seatuya does
+ * not depend on tuyapp's offset bookkeeping.
+ */
+static void
+replace_all(std::string &s, const std::string &from, const std::string &to)
+{
+	if (from.empty())
+		return;
+	for (size_t pos = 0;
+	     (pos = s.find(from, pos)) != std::string::npos;
+	     pos += to.size())
+		s.replace(pos, from.size(), to);
+}
+
+static std::string
+gen_payload(enum tuya_command cmd, const std::string &id,
+            const std::string &dps)
+{
+	std::string now = std::to_string((long long)time(NULL));
+	std::string p;
+
+	switch (cmd) {
+	case TUYA_CMD_HEART_BEAT:
+		p = "{\"gwId\":\"@devid@\",\"devId\":\"@devid@\"}";
+		break;
+	case TUYA_CMD_DP_QUERY:
+		p = "{\"gwId\":\"@devid@\",\"devId\":\"@devid@\","
+		    "\"uid\":\"@devid@\",\"t\":\"@now@\"}";
+		break;
+	case TUYA_CMD_CONTROL:
+		p = "{\"devId\":\"@devid@\",\"uid\":\"@devid@\","
+		    "\"dps\":@dps@,\"t\":\"@now@\"}";
+		break;
+	case TUYA_CMD_DP_QUERY_NEW:
+		p = "{\"devId\":\"@devid@\",\"uid\":\"@devid@\","
+		    "\"t\":\"@now@\"}";
+		break;
+	case TUYA_CMD_CONTROL_NEW:
+		p = "{\"protocol\":5,\"t\":@now@,\"data\":{\"dps\":@dps@}}";
+		break;
+	default:
+		return std::string();
+	}
+
+	replace_all(p, "@devid@", id);
+	replace_all(p, "@dps@", dps);
+	replace_all(p, "@now@", now);
+	return p;
+}
+
+
 extern "C" int
 tuya_build_message(tuya_device_t *dev, unsigned char *buf,
                       enum tuya_command cmd, const char *payload,
@@ -393,7 +470,7 @@ tuya_generate_payload(tuya_device_t *dev,
 		return NULL;
 
 	std::string dp = datapoints ? std::string(datapoints) : std::string();
-	std::string result = dev->api->GeneratePayload((uint8_t)cmd,
+	std::string result = gen_payload(cmd,
 	                         std::string(device_id), dp);
 	if (result.empty())
 		return NULL;
@@ -436,6 +513,19 @@ tuya_receive(tuya_device_t *dev, unsigned char *buf,
  * Internal helper: generate payload, build message, send, receive,
  * decode.  Returns malloc'd JSON string or NULL.
  *
+ * Command remapping (mirrors tinytuya):
+ *
+ *   device22:        DP_QUERY -> CONTROL_NEW with null-DP map,
+ *                    CONTROL  -> CONTROL_NEW
+ *   protocol 3.4/3.5: DP_QUERY -> DP_QUERY_NEW,
+ *                    CONTROL  -> CONTROL_NEW
+ *
+ * Status replies do not always arrive as a direct answer to the
+ * query frame: device22 firmware acks CONTROL_NEW with an empty
+ * payload and pushes the DP state as a separate STATUS (8) frame.
+ * For status queries we therefore read up to a few frames and
+ * return the first one carrying a JSON object.
+ *
  * On socket timeout or network error, closes the connection and
  * retries up to dev->retry_limit times (matching tinytuya's
  * _send_receive() behavior).
@@ -451,8 +541,27 @@ round_trip(tuya_device_t *dev, enum tuya_command cmd,
 	std::string key(dev->local_key);
 	std::string id(dev->device_id);
 
-	std::string payload_str = dev->api->GeneratePayload(
-	    (uint8_t)cmd, id, dp);
+	bool is_query = (cmd == TUYA_CMD_DP_QUERY);
+	bool new_cmdset =
+	    (dev->api->getProtocol() == tuyaAPI::Protocol::v34 ||
+	     dev->api->getProtocol() == tuyaAPI::Protocol::v35);
+
+	if (dev->device22) {
+		if (cmd == TUYA_CMD_DP_QUERY) {
+			cmd = TUYA_CMD_CONTROL_NEW;
+			dp = dev->dps_map ? std::string(dev->dps_map)
+			                  : std::string("{\"1\":null}");
+		} else if (cmd == TUYA_CMD_CONTROL) {
+			cmd = TUYA_CMD_CONTROL_NEW;
+		}
+	} else if (new_cmdset) {
+		if (cmd == TUYA_CMD_DP_QUERY)
+			cmd = TUYA_CMD_DP_QUERY_NEW;
+		else if (cmd == TUYA_CMD_CONTROL)
+			cmd = TUYA_CMD_CONTROL_NEW;
+	}
+
+	std::string payload_str = gen_payload(cmd, id, dp);
 	if (payload_str.empty())
 		return NULL;
 
@@ -465,22 +574,33 @@ round_trip(tuya_device_t *dev, enum tuya_command cmd,
 
 		int n = dev->api->send(dev->buf, len);
 		if (n >= 0) {
-			usleep(200000);
-			n = dev->api->receive(dev->buf,
-			        TUYA_RECOMMENDED_BUFSIZE, 30);
-			if (n > 0) {
+			/*
+			 * Status queries may be answered by a later
+			 * frame than the first; keep reading briefly.
+			 */
+			int recv_attempts = is_query ? 3 : 1;
+			for (int r = 0; r < recv_attempts; r++) {
+				usleep(200000);
+				n = dev->api->receive(dev->buf,
+				        TUYA_RECOMMENDED_BUFSIZE, 30);
+				if (n <= 0)
+					break;
 				std::string result =
 				    dev->api->DecodeTuyaMessage(
 				        dev->buf, n, key);
-				if (!result.empty()) {
-					char *out = (char *)malloc(
-					    result.size() + 1);
-					if (!out)
-						return NULL;
-					memcpy(out, result.c_str(),
-					    result.size() + 1);
-					return out;
-				}
+				if (result.empty())
+					continue;
+				if (is_query &&
+				    result.find('{') == std::string::npos &&
+				    r + 1 < recv_attempts)
+					continue;
+				char *out = (char *)malloc(
+				    result.size() + 1);
+				if (!out)
+					return NULL;
+				memcpy(out, result.c_str(),
+				    result.size() + 1);
+				return out;
 			}
 		}
 
@@ -493,6 +613,27 @@ round_trip(tuya_device_t *dev, enum tuya_command cmd,
 		if (!tuya_reconnect(dev))
 			return NULL;
 	}
+}
+
+extern "C" void
+tuya_set_device22(tuya_device_t *dev, const char *null_dps_json)
+{
+	if (!dev)
+		return;
+	free(dev->dps_map);
+	dev->dps_map = NULL;
+	if (null_dps_json) {
+		dev->device22 = true;
+		dev->dps_map = dup_str(null_dps_json);
+	} else {
+		dev->device22 = false;
+	}
+}
+
+extern "C" bool
+tuya_is_device22(const tuya_device_t *dev)
+{
+	return dev ? dev->device22 : false;
 }
 
 extern "C" char *

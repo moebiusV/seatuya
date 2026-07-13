@@ -355,6 +355,26 @@ int tuya_receive(tuya_device_t *dev, unsigned char *buf,
 /* ------------------------------------------------------------------ */
 
 /*
+ * device22 mode.  Firmware found on many devices with 22-character
+ * device ids reports protocol 3.3 but ignores DP_QUERY (10) and
+ * CONTROL (7).  In device22 mode tuya_status() sends CONTROL_NEW
+ * (13) with the null-valued DP map given here, and the tuya_set_*
+ * family also uses CONTROL_NEW.  This is the same behavior tinytuya
+ * calls dev_type="device22" and tuya-local exposes as protocol
+ * "3.22".
+ *
+ * null_dps_json names the data points to poll, all null, e.g.:
+ *     {"101":null,"102":null,"103":null,"104":null}
+ * Pass NULL to disable device22 mode.
+ *
+ * Enable explicitly for devices with 22-character ids; there is no
+ * reliable auto-detection (see tuya-local's changelog on why theirs
+ * was made explicit).
+ */
+void tuya_set_device22(tuya_device_t *dev, const char *null_dps_json);
+bool tuya_is_device22(const tuya_device_t *dev);
+
+/*
  * Set a single data point value.  Full round-trip: generate payload,
  * build message, send, receive, decode.
  * Returns a malloc'd JSON response string, or NULL on error.

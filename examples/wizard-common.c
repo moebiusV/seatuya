@@ -252,6 +252,11 @@ struct tuya_cloud {
 	const char *host;
 };
 
+/* forward declarations (used before their definitions below) */
+static char *tuya_api_call_r(struct tuya_cloud *cloud, const char *method,
+                             const char *uri, const char *body, bool retrying);
+static bool tuya_get_token(struct tuya_cloud *cloud);
+
 static char *
 tuya_api_call(struct tuya_cloud *cloud, const char *method,
               const char *uri, const char *body)
@@ -264,7 +269,16 @@ tuya_api_call_r(struct tuya_cloud *cloud, const char *method,
                 const char *uri, const char *body, bool retrying)
 {
 	char path[512];
-	snprintf(path, sizeof(path), "/v1.0/%s", uri);
+	/*
+	 * uri is normally relative to /v1.0/.  A leading '/' passes the
+	 * path through verbatim, which is how the /v2.0/cloud/thing/...
+	 * (thing data model / shadow) endpoints are reached.  The sign
+	 * algorithm covers the full path either way.
+	 */
+	if (uri[0] == '/')
+		snprintf(path, sizeof(path), "%s", uri);
+	else
+		snprintf(path, sizeof(path), "/v1.0/%s", uri);
 
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
@@ -523,32 +537,169 @@ find_json_in_frame(const char *data, int datalen)
 	return NULL;
 }
 
-static int
-udp_discover(struct tuya_device *devices, int count, int timeout_secs)
+/* ------------------------------------------------------------------ */
+/*  Thing Data Model (v2.0 "shadow") endpoints                        */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Newer Tuya products (including category "mzj") are migrated to the
+ * Thing Data Model.  For these, the v1.0 DP endpoints authenticate
+ * but return empty results:
+ *
+ *     /v1.0/devices/{id}/status      -> {"result":[]}
+ *     /v1.0/devices/{id}/functions   -> {"functions":[]}
+ *     .../commands                   -> error 2008
+ *
+ * because the device exposes *properties*, not *functions*.  The
+ * working endpoints are:
+ *
+ *     GET  /v2.0/cloud/thing/{id}/shadow/properties        (read)
+ *     GET  /v2.0/cloud/thing/{id}/model                    (schema)
+ *     POST /v2.0/cloud/thing/{id}/shadow/properties/issue  (write)
+ *
+ * The issue body wraps the property map as a *string*:
+ *     {"properties":"{\"temp_set\":500}"}
+ */
+
+static char *
+cloud_thing_model(struct tuya_cloud *cloud, const char *device_id)
 {
-	int sock = socket(AF_INET, SOCK_DGRAM, 0);
-	if (sock < 0) {
-		perror("socket");
-		return 0;
+	char path[256];
+	snprintf(path, sizeof(path), "/v2.0/cloud/thing/%s/model",
+	    device_id);
+	return tuya_api_call(cloud, "GET", path, NULL);
+}
+
+static char *
+cloud_shadow_properties(struct tuya_cloud *cloud, const char *device_id)
+{
+	char path[256];
+	snprintf(path, sizeof(path),
+	    "/v2.0/cloud/thing/%s/shadow/properties", device_id);
+	return tuya_api_call(cloud, "GET", path, NULL);
+}
+
+static char *
+cloud_shadow_issue(struct tuya_cloud *cloud, const char *device_id,
+                   const char *properties_json)
+{
+	char path[256];
+	snprintf(path, sizeof(path),
+	    "/v2.0/cloud/thing/%s/shadow/properties/issue", device_id);
+
+	/* wrap and escape the property map as a JSON string value */
+	struct strbuf body;
+	strbuf_init(&body);
+	strbuf_append(&body, "{\"properties\":\"", 15);
+	for (const char *p = properties_json; *p; p++) {
+		if (*p == '"' || *p == '\\')
+			strbuf_append(&body, "\\", 1);
+		strbuf_append(&body, p, 1);
+	}
+	strbuf_append(&body, "\"}", 2);
+
+	char *resp = tuya_api_call(cloud, "POST", path, body.data);
+	strbuf_free(&body);
+	return resp;
+}
+
+/*
+ * MD5("yGAdlopoPVldABfn") -- the static key every Tuya SDK uses to
+ * AES-128-ECB encrypt UDP broadcasts on port 6667.
+ */
+static const unsigned char tuya_udpkey[16] = {
+	0x6c, 0x1e, 0xc8, 0xe2, 0xbb, 0x9b, 0xb5, 0x9a,
+	0xb5, 0x0b, 0x0d, 0xaf, 0x64, 0x9b, 0x41, 0x0a
+};
+
+/*
+ * Decrypt an AES-128-ECB buffer in place with the static UDP key and
+ * strip PKCS#7 padding.  Returns plaintext length or -1.
+ */
+static int
+udp_broadcast_decrypt(unsigned char *buf, int len)
+{
+	if (len <= 0 || len % 16 != 0)
+		return -1;
+
+	EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+	if (!ctx)
+		return -1;
+
+	int outlen = 0, tmplen = 0, ok = 0;
+	unsigned char *out = malloc(len + 16);
+	if (out &&
+	    EVP_DecryptInit_ex(ctx, EVP_aes_128_ecb(), NULL,
+	                       tuya_udpkey, NULL) == 1 &&
+	    EVP_CIPHER_CTX_set_padding(ctx, 0) == 1 &&
+	    EVP_DecryptUpdate(ctx, out, &outlen, buf, len) == 1 &&
+	    EVP_DecryptFinal_ex(ctx, out + outlen, &tmplen) == 1)
+		ok = 1;
+	EVP_CIPHER_CTX_free(ctx);
+	if (!ok) {
+		free(out);
+		return -1;
+	}
+	outlen += tmplen;
+
+	int pad = out[outlen - 1];
+	if (pad < 1 || pad > 16 || pad > outlen) {
+		free(out);
+		return -1;
+	}
+	outlen -= pad;
+	memcpy(buf, out, outlen);
+	free(out);
+	return outlen;
+}
+
+/*
+ * Listen for Tuya device broadcasts on all three discovery ports:
+ *
+ *   6666  protocol 3.1        plaintext
+ *   6667  protocol 3.3 / 3.4  AES-128-ECB, static key
+ *   7000  protocol 3.5        AES-GCM (presence noted, not decoded)
+ *
+ * Devices matching entries in devices[] get ip/version filled in;
+ * unknown devices are appended up to capacity.  Returns the new
+ * device count.
+ */
+static int
+udp_discover(struct tuya_device *devices, int count, int capacity,
+             int timeout_secs)
+{
+	static const int ports[3] = { 6666, 6667, 7000 };
+	int socks[3] = { -1, -1, -1 };
+	int maxfd = -1;
+
+	for (int i = 0; i < 3; i++) {
+		int s = socket(AF_INET, SOCK_DGRAM, 0);
+		if (s < 0)
+			continue;
+		int reuse = 1;
+		setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &reuse,
+		    sizeof(reuse));
+		struct sockaddr_in addr;
+		memset(&addr, 0, sizeof(addr));
+		addr.sin_family = AF_INET;
+		addr.sin_port = htons(ports[i]);
+		addr.sin_addr.s_addr = htonl(INADDR_ANY);
+		if (bind(s, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+			fprintf(stderr, "bind udp/%d failed\n", ports[i]);
+			close(s);
+			continue;
+		}
+		socks[i] = s;
+		if (s > maxfd)
+			maxfd = s;
+	}
+	if (maxfd < 0) {
+		fprintf(stderr, "no discovery ports could be opened\n");
+		return count;
 	}
 
-	int reuse = 1;
-	setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
-
-	struct sockaddr_in addr;
-	memset(&addr, 0, sizeof(addr));
-	addr.sin_family = AF_INET;
-	addr.sin_port = htons(UDP_PORT);
-	addr.sin_addr.s_addr = htonl(INADDR_ANY);
-
-	if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-		perror("bind UDP port 6666");
-		close(sock);
-		return 0;
-	}
-
-	printf("\nScanning local network on UDP port %d (%ds)...\n",
-	    UDP_PORT, timeout_secs);
+	printf("\nScanning local network on udp 6666/6667/7000 (%ds)...\n",
+	    timeout_secs);
 
 	struct timeval deadline;
 	gettimeofday(&deadline, NULL);
@@ -567,47 +718,106 @@ udp_discover(struct tuya_device *devices, int count, int timeout_secs)
 
 		fd_set fds;
 		FD_ZERO(&fds);
-		FD_SET(sock, &fds);
+		for (int i = 0; i < 3; i++)
+			if (socks[i] >= 0)
+				FD_SET(socks[i], &fds);
 
-		if (select(sock + 1, &fds, NULL, NULL, &tv) <= 0)
+		if (select(maxfd + 1, &fds, NULL, NULL, &tv) <= 0)
 			continue;
 
-		char buf[MAX_BUF];
-		struct sockaddr_in sender;
-		socklen_t slen = sizeof(sender);
-		int n = recvfrom(sock, buf, sizeof(buf) - 1, 0,
-		                 (struct sockaddr *)&sender, &slen);
-		if (n <= 0) continue;
-		buf[n] = '\0';
+		for (int i = 0; i < 3; i++) {
+			if (socks[i] < 0 || !FD_ISSET(socks[i], &fds))
+				continue;
 
-		const char *json = find_json_in_frame(buf, n);
-		if (!json) continue;
+			unsigned char buf[MAX_BUF];
+			struct sockaddr_in sender;
+			socklen_t slen = sizeof(sender);
+			int n = recvfrom(socks[i], buf, sizeof(buf) - 17, 0,
+			                 (struct sockaddr *)&sender, &slen);
+			if (n <= 0)
+				continue;
+			buf[n] = '\0';
 
-		char gw_id[128] = {0}, ip[64] = {0}, ver[16] = {0};
-		json_get_string(json, "gwId", gw_id, sizeof(gw_id));
-		if (!gw_id[0]) continue;
+			char sender_ip[64];
+			inet_ntop(AF_INET, &sender.sin_addr, sender_ip,
+			    sizeof(sender_ip));
 
-		if (!json_get_string(json, "ip", ip, sizeof(ip)))
-			inet_ntop(AF_INET, &sender.sin_addr, ip, sizeof(ip));
-		json_get_string(json, "version", ver, sizeof(ver));
+			if (ports[i] == 7000) {
+				/*
+				 * v3.5 GCM broadcast; id not recoverable
+				 * without a GCM implementation, but the
+				 * presence tells us the protocol version.
+				 */
+				printf("  %-15s  v3.5 broadcast (use "
+				       "protocol 3.5)\n", sender_ip);
+				continue;
+			}
 
-		for (int i = 0; i < count; i++) {
-			if (strcmp(devices[i].id, gw_id) == 0) {
-				if (!devices[i].ip[0]) {
-					strncpy(devices[i].ip, ip, sizeof(devices[i].ip) - 1);
+			const char *json = NULL;
+			if (ports[i] == 6667) {
+				/* 55AA frame: 16 hdr + 4 retcode ...
+				 * 4 crc + 4 suffix */
+				if (n < 28)
+					continue;
+				int plen = udp_broadcast_decrypt(&buf[20],
+				               n - 28);
+				if (plen < 0)
+					continue;
+				buf[20 + plen] = '\0';
+				json = find_json_in_frame((char *)&buf[20],
+				           plen);
+			} else {
+				json = find_json_in_frame((char *)buf, n);
+			}
+			if (!json)
+				continue;
+
+			char gw_id[128] = {0}, ip[64] = {0}, ver[16] = {0};
+			json_get_string(json, "gwId", gw_id, sizeof(gw_id));
+			if (!gw_id[0])
+				continue;
+			if (!json_get_string(json, "ip", ip, sizeof(ip)))
+				strncpy(ip, sender_ip, sizeof(ip) - 1);
+			json_get_string(json, "version", ver, sizeof(ver));
+
+			bool matched = false;
+			for (int d = 0; d < count; d++) {
+				if (strcmp(devices[d].id, gw_id) != 0)
+					continue;
+				matched = true;
+				if (!devices[d].ip[0]) {
+					strncpy(devices[d].ip, ip,
+					    sizeof(devices[d].ip) - 1);
 					if (ver[0])
-						strncpy(devices[i].version, ver, sizeof(devices[i].version) - 1);
+						strncpy(devices[d].version,
+						    ver,
+						    sizeof(devices[d].version) - 1);
 					found++;
-					printf("  %-40s %s  v%s\n", devices[i].name, ip, ver);
+					printf("  %-40s %s  v%s\n",
+					    devices[d].name, ip, ver);
 				}
 				break;
+			}
+			if (!matched && count < capacity) {
+				struct tuya_device *d = &devices[count];
+				memset(d, 0, sizeof(*d));
+				strncpy(d->id, gw_id, sizeof(d->id) - 1);
+				strncpy(d->ip, ip, sizeof(d->ip) - 1);
+				strncpy(d->version, ver,
+				    sizeof(d->version) - 1);
+				count++;
+				found++;
+				printf("  %-40s %s  v%s  (not in cloud "
+				       "list)\n", gw_id, ip, ver);
 			}
 		}
 	}
 
-	close(sock);
+	for (int i = 0; i < 3; i++)
+		if (socks[i] >= 0)
+			close(socks[i]);
 	printf("  %d device(s) found on local network.\n", found);
-	return found;
+	return count;
 }
 
 /* ------------------------------------------------------------------ */
@@ -740,7 +950,10 @@ usage(const char *prog)
 	    "  -o FILE     Device list output (default: devices.json)\n"
 	    "  -t SECS     UDP scan timeout   (default: 8)\n"
 	    "  -N          No cloud (scan only)\n"
-	    "  -y          Assume yes\n",
+	    "  -y          Assume yes\n"
+	    "  -S          Query thing-model shadow properties (v2.0)\n"
+	    "  -M          Query thing-model schema (v2.0)\n"
+	    "  -I JSON     Issue shadow property set, e.g. '{\"temp_set\":500}'\n",
 	    prog);
 }
 
@@ -756,12 +969,15 @@ wizard_main(int argc, char *argv[])
 	int scan_timeout = 8;
 	bool no_cloud = false;
 	bool assume_yes = false;
+	bool shadow_query = false;
+	bool model_query = false;
+	char issue_json[1024] = "";
 	int opt;
 
 	struct tuya_cloud cloud;
 	memset(&cloud, 0, sizeof(cloud));
 
-	while ((opt = getopt(argc, argv, "k:s:r:i:c:o:t:Nyh")) != -1) {
+	while ((opt = getopt(argc, argv, "k:s:r:i:c:o:t:NySMI:h")) != -1) {
 		switch (opt) {
 		case 'k': strncpy(cloud.api_key, optarg, sizeof(cloud.api_key) - 1); break;
 		case 's': strncpy(cloud.api_secret, optarg, sizeof(cloud.api_secret) - 1); break;
@@ -772,6 +988,9 @@ wizard_main(int argc, char *argv[])
 		case 't': scan_timeout = atoi(optarg); break;
 		case 'N': no_cloud = true; break;
 		case 'y': assume_yes = true; break;
+		case 'S': shadow_query = true; break;
+		case 'M': model_query = true; break;
+		case 'I': strncpy(issue_json, optarg, sizeof(issue_json) - 1); break;
 		default:
 			usage(argv[0]);
 			return (opt == 'h') ? 0 : 1;
@@ -837,6 +1056,42 @@ wizard_main(int argc, char *argv[])
 			free(devices);
 			return 1;
 		}
+
+		/*
+		 * Thing-model one-shot queries.  These are the working
+		 * DP access path for devices (e.g. category "mzj") whose
+		 * v1.0 status/functions endpoints return empty.
+		 */
+		if (shadow_query || model_query || issue_json[0]) {
+			const char *devid = cloud.api_device_id;
+			if (!devid[0]) {
+				fprintf(stderr, "-S/-M/-I require a device "
+				        "id (-i)\n");
+				free(devices);
+				return 1;
+			}
+			char *resp;
+			if (model_query) {
+				resp = cloud_thing_model(&cloud, devid);
+				printf("model:\n%s\n", resp ? resp : "(null)");
+				free(resp);
+			}
+			if (shadow_query) {
+				resp = cloud_shadow_properties(&cloud, devid);
+				printf("shadow properties:\n%s\n",
+				    resp ? resp : "(null)");
+				free(resp);
+			}
+			if (issue_json[0]) {
+				resp = cloud_shadow_issue(&cloud, devid,
+				           issue_json);
+				printf("issue result:\n%s\n",
+				    resp ? resp : "(null)");
+				free(resp);
+			}
+			free(devices);
+			return 0;
+		}
 		printf("  authenticated.\n");
 
 		printf("Fetching device list...\n");
@@ -863,76 +1118,10 @@ wizard_main(int argc, char *argv[])
 	else
 		do_scan = prompt_yn("\nPoll local devices?", true);
 
-	if (do_scan && device_count > 0) {
-		udp_discover(devices, device_count, scan_timeout);
+	if (do_scan) {
+		device_count = udp_discover(devices, device_count,
+		                   MAX_DEVICES, scan_timeout);
 		save_devices(device_file, devices, device_count);
-	} else if (do_scan && device_count == 0 && no_cloud) {
-		printf("\nScanning local network on UDP port %d (%ds)...\n",
-		    UDP_PORT, scan_timeout);
-
-		int sock = socket(AF_INET, SOCK_DGRAM, 0);
-		if (sock >= 0) {
-			int reuse = 1;
-			setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
-			struct sockaddr_in addr;
-			memset(&addr, 0, sizeof(addr));
-			addr.sin_family = AF_INET;
-			addr.sin_port = htons(UDP_PORT);
-			addr.sin_addr.s_addr = htonl(INADDR_ANY);
-
-			if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) == 0) {
-				struct timeval deadline;
-				gettimeofday(&deadline, NULL);
-				deadline.tv_sec += scan_timeout;
-
-				for (;;) {
-					struct timeval now, tv;
-					gettimeofday(&now, NULL);
-					if (now.tv_sec > deadline.tv_sec) break;
-					tv.tv_sec = 1; tv.tv_usec = 0;
-					fd_set fds;
-					FD_ZERO(&fds);
-					FD_SET(sock, &fds);
-					if (select(sock + 1, &fds, NULL, NULL, &tv) <= 0) continue;
-
-					char buf[MAX_BUF];
-					struct sockaddr_in sender;
-					socklen_t slen = sizeof(sender);
-					int n = recvfrom(sock, buf, sizeof(buf) - 1, 0,
-					                 (struct sockaddr *)&sender, &slen);
-					if (n <= 0) continue;
-					buf[n] = '\0';
-
-					const char *json = find_json_in_frame(buf, n);
-					if (!json) continue;
-
-					char gw_id[128] = {0}, ip[64] = {0}, ver[16] = {0};
-					json_get_string(json, "gwId", gw_id, sizeof(gw_id));
-					if (!gw_id[0]) continue;
-					if (!json_get_string(json, "ip", ip, sizeof(ip)))
-						inet_ntop(AF_INET, &sender.sin_addr, ip, sizeof(ip));
-					json_get_string(json, "version", ver, sizeof(ver));
-
-					bool dup = false;
-					for (int i = 0; i < device_count; i++) {
-						if (strcmp(devices[i].id, gw_id) == 0) {
-							dup = true; break;
-						}
-					}
-					if (dup) continue;
-
-					struct tuya_device *d = &devices[device_count];
-					memset(d, 0, sizeof(*d));
-					strncpy(d->id, gw_id, sizeof(d->id) - 1);
-					strncpy(d->ip, ip, sizeof(d->ip) - 1);
-					strncpy(d->version, ver, sizeof(d->version) - 1);
-					device_count++;
-					printf("  %s  id=%s  v=%s\n", ip, gw_id, ver);
-				}
-			}
-			close(sock);
-			printf("  %d device(s) found.\n", device_count);
-		}
 	}
 
 	printf("\nDone.\n");
