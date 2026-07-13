@@ -256,6 +256,13 @@ static char *
 tuya_api_call(struct tuya_cloud *cloud, const char *method,
               const char *uri, const char *body)
 {
+	return tuya_api_call_r(cloud, method, uri, body, false);
+}
+
+static char *
+tuya_api_call_r(struct tuya_cloud *cloud, const char *method,
+                const char *uri, const char *body, bool retrying)
+{
 	char path[512];
 	snprintf(path, sizeof(path), "/v1.0/%s", uri);
 
@@ -268,6 +275,61 @@ tuya_api_call(struct tuya_cloud *cloud, const char *method,
 	char content_hash[65];
 	sha256_hex(body ? body : "", body ? (int)strlen(body) : 0, content_hash);
 
+	/* Build headers — match tinytuya's new sign algorithm */
+	const char *hkeys[8];
+	const char *hvals[8];
+	char sig_headers_buf[256];
+	int nheaders = 0;
+
+	hkeys[nheaders] = "client_id";
+	hvals[nheaders] = cloud->api_key;
+	nheaders++;
+
+	/* sign placeholder — filled after signature is computed */
+	hkeys[nheaders] = "sign";
+	hvals[nheaders] = "";
+	nheaders++;
+
+	hkeys[nheaders] = "t";
+	hvals[nheaders] = ts;
+	nheaders++;
+
+	hkeys[nheaders] = "sign_method";
+	hvals[nheaders] = "HMAC-SHA256";
+	nheaders++;
+
+	hkeys[nheaders] = "mode";
+	hvals[nheaders] = "cors";
+	nheaders++;
+
+	if (cloud->token[0]) {
+		hkeys[nheaders] = "access_token";
+		hvals[nheaders] = cloud->token;
+		nheaders++;
+	} else {
+		/* token request: send secret as header (tinytuya compat) */
+		hkeys[nheaders] = "secret";
+		hvals[nheaders] = cloud->api_secret;
+		nheaders++;
+	}
+
+	if (body && body[0]) {
+		hkeys[nheaders] = "Content-type";
+		hvals[nheaders] = "application/json";
+		nheaders++;
+	}
+
+	/* Build Signature-Headers: colon-separated list of header keys */
+	sig_headers_buf[0] = '\0';
+	for (int i = 0; i < nheaders; i++) {
+		if (i > 0) strcat(sig_headers_buf, ":");
+		strcat(sig_headers_buf, hkeys[i]);
+	}
+	hkeys[nheaders] = "Signature-Headers";
+	hvals[nheaders] = sig_headers_buf;
+	nheaders++;
+
+	/* Build HMAC payload — tinytuya new sign algorithm */
 	struct strbuf payload;
 	strbuf_init(&payload);
 
@@ -279,6 +341,14 @@ tuya_api_call(struct tuya_cloud *cloud, const char *method,
 	strbuf_append(&payload, "\n", 1);
 	strbuf_append(&payload, content_hash, strlen(content_hash));
 	strbuf_append(&payload, "\n", 1);
+	/* header lines (all headers except Signature-Headers itself) */
+	for (int i = 0; i < nheaders - 1; i++) {
+		if (strcmp(hkeys[i], "Signature-Headers") == 0) continue;
+		strbuf_append(&payload, hkeys[i], strlen(hkeys[i]));
+		strbuf_append(&payload, ":", 1);
+		strbuf_append(&payload, hvals[i], strlen(hvals[i]));
+		strbuf_append(&payload, "\n", 1);
+	}
 	strbuf_append(&payload, "\n", 1);
 	strbuf_append(&payload, path, strlen(path));
 
@@ -289,23 +359,22 @@ tuya_api_call(struct tuya_cloud *cloud, const char *method,
 
 	char signature[65];
 	to_upper_hex(hmac_raw, 32, signature);
+	hvals[1] = signature; /* fill in sign placeholder */
 
-	const char *hkeys[] = {
-		"client_id", "sign", "t", "sign_method", "mode",
-		"Content-type"
-	};
-	const char *hvals[6];
-	hvals[0] = cloud->api_key;
-	hvals[1] = signature;
-	hvals[2] = ts;
-	hvals[3] = "HMAC-SHA256";
-	hvals[4] = "cors";
-	hvals[5] = "application/json";
+	char *resp = https_request(cloud->host, method, path,
+	                            hkeys, hvals, nheaders, body);
 
-	int nheaders = (body && body[0]) ? 6 : 5;
+	/* Token refresh on expiry — match tinytuya behaviour */
+	if (resp && strstr(resp, "token invalid") &&
+	    cloud->token[0] && !retrying) {
+		free(resp);
+		if (tuya_get_token(cloud))
+			return tuya_api_call_r(cloud, method, uri,
+			                       body, true);
+		return NULL;
+	}
 
-	return https_request(cloud->host, method, path,
-	                     hkeys, hvals, nheaders, body);
+	return resp;
 }
 
 static bool

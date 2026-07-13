@@ -38,3 +38,4 @@ Makefile.in
 
 # Fetched dependencies (not shipped — see fetch-deps.sh)
 /deps/
+devices.json\ntinytuya.json
