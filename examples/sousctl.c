@@ -409,7 +409,7 @@ set_temp(tuya_device_t *d, int target_c_x10)
         vlog("target %.1f C / %.1f F\n", c, c_to_f(c));
         char *resp = tuya_set_value_int(d, DPS_TARGET_TEMP, target_c_x10);
         if (resp) {
-                printf("  target: %.1f C / %.1f — success.\n", c, c_to_f(c));
+                printf("  target: %.1f C / %.1f F — success.\n", c, c_to_f(c));
                 if (verbose) printf("  %s\n", resp);
                 tuya_free_string(resp);
         } else {
@@ -910,7 +910,7 @@ main(int argc, char **argv)
                                 }
                         }
                         set_temp(d, t);
-                        wait_for_temp(d, t);
+                        if (i < argc) wait_for_temp(d, t);
                         tuya_disconnect(d); tuya_destroy(d);
                         continue;
                 }
