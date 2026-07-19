@@ -89,6 +89,11 @@ enum inkbird_dps {
         DPS_TEMP_CAL     = 110    /* int: calibration offset * 10       */
 };
 
+/* Temperature tolerance for catch-up waiting - 0.5 C.  The Inkbird
+   PID typically settles within this band. */
+static const int DPS_TOLERANCE     = 5;
+static const int POLL_INTERVAL_SEC = 60;
+
 static void
 cleanup_poweroff(void)
 {
@@ -426,6 +431,71 @@ power_off(tuya_device_t *d)
 }
 
 /* ------------------------------------------------------------------ */
+/*  Temperature helpers                                                 */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Extract DP 104 (current water temperature) from a status JSON string.
+ * Returns Celsius * 10 on success, or -1 if the value is not found.
+ */
+static int
+parse_dp104(const char *json)
+{
+        const char *p = strstr(json, "\"104\"");
+        if (!p) return -1;
+        p = strchr(p, ':');
+        if (!p) return -1;
+        return (int)strtol(p + 1, NULL, 10);
+}
+
+/*
+ * Read current water temperature (DP 104) from the device.
+ * Returns Celsius * 10 on success, or -1 on error.
+ */
+static int
+read_current_temp(tuya_device_t *d)
+{
+        char *resp = tuya_status(d);
+        if (!resp) return -1;
+        int val = parse_dp104(resp);
+        tuya_free_string(resp);
+        return val;
+}
+
+/*
+ * Poll the device until current temperature reaches target (Celsius * 10)
+ * within DPS_TOLERANCE.  Polls every POLL_INTERVAL_SEC seconds.
+ * No timeout -- if the heater is slow, we wait.  SIGINT to abort.
+ */
+static void
+wait_for_temp(tuya_device_t *d, int target_c_x10)
+{
+        int first = 1;
+        for (;;) {
+                tuya_reconnect(d);
+                int current = read_current_temp(d);
+                if (current < 0) {
+                        vlog("error reading temp, retrying...\n");
+                        sleep(POLL_INTERVAL_SEC);
+                        continue;
+                }
+                if (abs(current - target_c_x10) <= DPS_TOLERANCE) {
+                        printf("  reached %.1f C\n", current / 10.0);
+                        return;
+                }
+                if (first) {
+                        printf("  waiting for water to reach %.1f C...\n",
+                            target_c_x10 / 10.0);
+                        first = 0;
+                }
+                vlog("current %.1f C, target %.1f C (delta %.1f)\n",
+                    current / 10.0, target_c_x10 / 10.0,
+                    (target_c_x10 - current) / 10.0);
+                sleep(POLL_INTERVAL_SEC);
+        }
+}
+
+/* ------------------------------------------------------------------ */
 /*  Status / read                                                      */
 /* ------------------------------------------------------------------ */
 
@@ -501,20 +571,15 @@ cmd_read(tuya_device_t *d)
                 fprintf(stderr, "error: no response from device\n");
                 return;
         }
-        const char *p = strstr(resp, "\"104\"");
-        if (p) {
-                p = strchr(p, ':');
-                if (p) {
-                        int val = (int)strtol(p + 1, NULL, 10);
-                        printf("%.1f C / %.1f F — success.\n",
-                            val / 10.0, c_to_f(val / 10.0));
-                        if (verbose) printf("  %s\n", resp);
-                        tuya_free_string(resp);
-                        return;
-                }
+        int val = parse_dp104(resp);
+        if (val >= 0) {
+                printf("%.1f C / %.1f F — success.\n",
+                    val / 10.0, c_to_f(val / 10.0));
+                if (verbose) printf("  %s\n", resp);
+        } else {
+                printf("read — FAILED.\n");
+                printf("  %s\n", resp);
         }
-        printf("read — FAILED.\n");
-        printf("  %s\n", resp);
         tuya_free_string(resp);
 }
 
@@ -531,10 +596,12 @@ struct phase {
 static int
 run_ramp(tuya_device_t *d, struct phase *phases, int nphases, bool poweroff)
 {
+        (void)poweroff;
         for (int pi = 0; pi < nphases; pi++) {
                 struct phase *ph = &phases[pi];
                 int steps    = ph->duration_secs / 60;
                 int remainder = ph->duration_secs % 60;
+                time_t phase_start = time(NULL);
 
                 if (steps < 1 && remainder == 0)
                         steps = 1;
@@ -549,6 +616,51 @@ run_ramp(tuya_device_t *d, struct phase *phases, int nphases, bool poweroff)
                         printf("\n--- Hold at %.1f C for %d:%02d ---\n",
                             ph->start / 10.0,
                             ph->duration_secs / 60, ph->duration_secs % 60);
+
+                        set_temp(d, ph->start);
+                        wait_for_temp(d, ph->start);
+
+                        printf("  holding at %.1f C for %d:%02d...\n",
+                            ph->start / 10.0,
+                            ph->duration_secs / 60, ph->duration_secs % 60);
+
+                        int hold_elapsed = 0;
+                        int cold_since = -1;
+                        int cold_max_delta = 0;
+
+                        while (hold_elapsed < ph->duration_secs) {
+                                int chunk = POLL_INTERVAL_SEC;
+                                if (hold_elapsed + chunk > ph->duration_secs)
+                                        chunk = ph->duration_secs - hold_elapsed;
+                                sleep(chunk);
+                                hold_elapsed += chunk;
+
+                                tuya_reconnect(d);
+                                int actual = read_current_temp(d);
+                                if (actual < 0) continue;
+
+                                int delta = ph->start - actual;
+                                if (delta > 20) {
+                                        if (cold_since < 0) {
+                                                cold_since = hold_elapsed;
+                                                cold_max_delta = delta;
+                                                printf("  ! dropped to %.1f C"
+                                                    " (%.1f C below target)\n",
+                                                    actual / 10.0, delta / 10.0);
+                                        } else if (delta > cold_max_delta) {
+                                                cold_max_delta = delta;
+                                        }
+                                } else if (cold_since >= 0
+                                    && delta <= DPS_TOLERANCE) {
+                                        int dur = hold_elapsed - cold_since;
+                                        printf("  recovered after %d:%02d"
+                                            " (max deviation %.1f C)\n",
+                                            dur / 60, dur % 60,
+                                            cold_max_delta / 10.0);
+                                        cold_since = -1;
+                                        cold_max_delta = 0;
+                                }
+                        }
                 } else {
                         vlog("phase %d: ramp %.1f -> %.1f C over %d:%02d"
                             " (%d steps)\n",
@@ -560,26 +672,60 @@ run_ramp(tuya_device_t *d, struct phase *phases, int nphases, bool poweroff)
                             ph->start / 10.0, ph->end / 10.0,
                             ph->duration_secs / 60, ph->duration_secs % 60,
                             steps, step_d / 10.0);
+
+                        set_temp(d, ph->start);
+
+                        for (int i = 1; i <= steps; i++) {
+                                int target = ph->start
+                                    + (int)round(step_d * i);
+                                int lo = (ph->start < ph->end)
+                                    ? ph->start : ph->end;
+                                int hi = (ph->start < ph->end)
+                                    ? ph->end   : ph->start;
+                                if (target < lo) target = lo;
+                                if (target > hi) target = hi;
+
+                                printf("[%3d/%d min] ", i, steps);
+                                sleep(60);
+                                tuya_reconnect(d);
+                                set_temp(d, target);
+                                int actual = read_current_temp(d);
+                                if (actual >= 0) {
+                                        printf("target %.1f C,"
+                                            " actual %.1f C",
+                                            target / 10.0, actual / 10.0);
+                                        if (abs(actual - target)
+                                            > DPS_TOLERANCE)
+                                                printf(" (catching up)");
+                                        printf("\n");
+                                } else {
+                                        printf("target %.1f C\n",
+                                            target / 10.0);
+                                }
+                        }
+
+                        if (remainder > 0) {
+                                printf("[holding %d sec] ", remainder);
+                                sleep(remainder);
+                        }
+
+                        /* Catch-up at phase boundary:
+                           block until water reaches end temp before
+                           transitioning to the next phase. */
+                        wait_for_temp(d, ph->end);
                 }
 
-                set_temp(d, ph->start);
-
-                for (int i = 1; i <= steps; i++) {
-                        int target = ph->start + (int)round(step_d * i);
-                        int lo = (ph->start < ph->end) ? ph->start : ph->end;
-                        int hi = (ph->start < ph->end) ? ph->end   : ph->start;
-                        if (target < lo) target = lo;
-                        if (target > hi) target = hi;
-
-                        printf("[%3d/%d min] ", i, steps);
-                        sleep(60);
-                        tuya_reconnect(d);
-                        set_temp(d, target);
-                }
-
-                if (remainder > 0) {
-                        printf("[holding %d sec] ", remainder);
-                        sleep(remainder);
+                /* Report overtime if the phase took significantly
+                   longer than planned. */
+                time_t phase_end = time(NULL);
+                int elapsed = (int)(phase_end - phase_start);
+                if (elapsed > ph->duration_secs + 60) {
+                        int overtime = elapsed - ph->duration_secs;
+                        printf("  phase took %d:%02d"
+                            " (planned %d:%02d, +%d:%02d overtime)\n",
+                            elapsed / 60, elapsed % 60,
+                            ph->duration_secs / 60, ph->duration_secs % 60,
+                            overtime / 60, overtime % 60);
                 }
         }
 
@@ -620,6 +766,11 @@ usage(const char *prog)
 "  %s -n ramp 20C 85C 60:00\n"
 "\n"
 "Power-off is implicit at end of every chain and on crash/kill.\n"
+"\n"
+"Ramp durations are minimums: if the water hasn't reached the target\n"
+"by the end of a phase, sousctl waits until it catches up before\n"
+"starting the next phase.  During holds, large temperature drops\n"
+"(e.g., from adding cold water) are detected and reported.\n"
 "\n"
 "Global options:\n"
 "  -c FILE    config file path\n"
@@ -751,7 +902,15 @@ main(int argc, char **argv)
                                 fprintf(stderr, "error: connect failed\n");
                                 free(phases); return 1;
                         }
+                        {
+                                char *resp = tuya_turn_on(d, DPS_POWER);
+                                if (resp) {
+                                        if (verbose) printf("  %s\n", resp);
+                                        tuya_free_string(resp);
+                                }
+                        }
                         set_temp(d, t);
+                        wait_for_temp(d, t);
                         tuya_disconnect(d); tuya_destroy(d);
                         continue;
                 }
