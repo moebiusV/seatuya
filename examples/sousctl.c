@@ -476,7 +476,8 @@ set_temp(tuya_device_t *d, int target_c_x10)
                 if (verbose) tprintf("  %s\n", resp);
                 tuya_free_string(resp);
         } else {
-                vlog("target %.1f C / %.1f F — no ack\n", c, c_to_f(c));
+                tprintf("  target: %.1f C / %.1f F — unconfirmed\n",
+                    c, c_to_f(c));
         }
 }
 
@@ -489,7 +490,7 @@ power_off(tuya_device_t *d)
                 if (verbose) tprintf("  %s\n", resp);
                 tuya_free_string(resp);
         } else {
-                vlog("power off — no ack\n");
+                tprintf("power off — unconfirmed\n");
         }
 }
 
