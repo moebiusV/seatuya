@@ -605,8 +605,11 @@ recover_from_fault(tuya_device_t *d, int target_c_x10)
 
         tprintf("  ! device faulted: ");
         print_fault_bits(fault_code);
-        tprintf(" (%s)\n",
-            is_e2 ? "auto-recoverable" : "non-E2 — limited retries");
+        if (is_e2)
+                tprintf(" — refill water and device will recover\n");
+        else
+                tprintf(" — check device, max %d restart attempts\n",
+                    MAX_NON_E2_PROBES);
 
         /* Turn off to silence beeping */
         tuya_turn_off(d, DPS_POWER);
@@ -685,8 +688,12 @@ recover_from_fault(tuya_device_t *d, int target_c_x10)
         }
 
         /* ALARM: max probes exhausted (non-E2 path only) */
-        fprintf(stderr, "sousctl: ALARM — max probes exhausted,"
-            " device left off\n");
+        tprintf("ALARM: ");
+        print_fault_bits(fault_code);
+        tprintf(" — max %d probes failed, device left off."
+            "  Check device and restart manually.\n",
+            MAX_NON_E2_PROBES);
+        print_elapsed();
         exit(1);
 }
 
