@@ -57,6 +57,7 @@
 static bool verbose = false;
 static tuya_device_t *atexit_dev = NULL;
 static char override_ip[256] = {0};
+static time_t start_time;
 
 static void
 vlog(const char *fmt, ...)
@@ -69,6 +70,19 @@ vlog(const char *fmt, ...)
         va_list ap;
         va_start(ap, fmt);
         vfprintf(stderr, fmt, ap);
+        va_end(ap);
+}
+
+static void
+tprintf(const char *fmt, ...)
+{
+        time_t now = time(NULL);
+        struct tm *lt = localtime(&now);
+        fprintf(stdout, "[%02d:%02d:%02d] ",
+            lt->tm_hour, lt->tm_min, lt->tm_sec);
+        va_list ap;
+        va_start(ap, fmt);
+        vprintf(fmt, ap);
         va_end(ap);
 }
 
@@ -111,11 +125,17 @@ static const int FAULT_E2_MASK     = 2;   /* bit 1 = dry-run / low-water */
 static void
 print_fault_bits(int code)
 {
-        if (code == 0) { printf("none"); return; }
-        for (int b = 0; b < 8; b++)
+        /* ISV-300W: bit 0 is the run/active indicator (always set
+           when powered on), not a fault.  Only bits 1+ are errors. */
+        int faults = code & ~1;
+        if (faults == 0) {
+                tprintf("none (running, raw 0x%02x)", code);
+                return;
+        }
+        for (int b = 1; b < 8; b++)
                 if (code & (1 << b))
-                        printf("E%d ", b + 1);
-        printf("(raw 0x%02x)", code);
+                        tprintf("E%d ", b + 1);
+        tprintf("(raw 0x%02x)", code);
 }
 
 /* Temperature heuristic: if bath temp rises within this many decicelsius
@@ -124,12 +144,23 @@ print_fault_bits(int code)
 static const int REIMMERSE_DELTA   = 30;  /* 3.0 C */
 
 static void
+print_elapsed(void)
+{
+        time_t now = time(NULL);
+        int elapsed = (int)(now - start_time);
+        struct tm *lt = localtime(&now);
+        tprintf("elapsed %d:%02d:%02d\n",
+            elapsed / 3600, (elapsed % 3600) / 60, elapsed % 60);
+}
+
+static void
 cleanup_poweroff(void)
 {
         tuya_device_t *d = atexit_dev;
         if (!d) return;
         atexit_dev = NULL;
-        fprintf(stderr, "\nsousctl: shutting down device\n");
+        fprintf(stderr, "\n");
+        print_elapsed();
         tuya_turn_off(d, DPS_POWER);
         tuya_disconnect(d);
         tuya_destroy(d);
@@ -428,7 +459,7 @@ parse_duration(const char *s, bool *ok)
 static void
 print_response(char *resp)
 {
-        if (resp) { printf("  %s\n", resp); tuya_free_string(resp); }
+        if (resp) { tprintf("  %s\n", resp); tuya_free_string(resp); }
 }
 
 static void
@@ -438,11 +469,11 @@ set_temp(tuya_device_t *d, int target_c_x10)
         vlog("target %.1f C / %.1f F\n", c, c_to_f(c));
         char *resp = tuya_set_value_int(d, DPS_TARGET_TEMP, target_c_x10);
         if (resp) {
-                printf("  target: %.1f C / %.1f F — success.\n", c, c_to_f(c));
-                if (verbose) printf("  %s\n", resp);
+                vlog("target %.1f C / %.1f F — success.\n", c, c_to_f(c));
+                if (verbose) tprintf("  %s\n", resp);
                 tuya_free_string(resp);
         } else {
-                printf("  target: %.1f C / %.1f — FAILED.\n", c, c_to_f(c));
+                tprintf("  target: %.1f C / %.1f F — FAILED.\n", c, c_to_f(c));
         }
 }
 
@@ -451,11 +482,11 @@ power_off(tuya_device_t *d)
 {
         char *resp = tuya_turn_off(d, DPS_POWER);
         if (resp) {
-                printf("  power off — success.\n");
-                if (verbose) printf("  %s\n", resp);
+                tprintf("  power off — success.\n");
+                if (verbose) tprintf("  %s\n", resp);
                 tuya_free_string(resp);
         } else {
-                printf("  power off — FAILED.\n");
+                tprintf("  power off — FAILED.\n");
         }
 }
 
@@ -572,9 +603,9 @@ recover_from_fault(tuya_device_t *d, int target_c_x10)
         is_e2     = (fault_code & FAULT_E2_MASK) != 0;
         max_probes = is_e2 ? 9999 : MAX_NON_E2_PROBES;
 
-        printf("  ! device faulted: ");
+        tprintf("  ! device faulted: ");
         print_fault_bits(fault_code);
-        printf(" (%s)\n",
+        tprintf(" (%s)\n",
             is_e2 ? "auto-recoverable" : "non-E2 — limited retries");
 
         /* Turn off to silence beeping */
@@ -598,7 +629,7 @@ recover_from_fault(tuya_device_t *d, int target_c_x10)
                                 if (cur >= 0
                                     && (pre_fault_temp - cur)
                                         <= REIMMERSE_DELTA) {
-                                        printf("  temp recovering (%.1f C)"
+                                        tprintf("  temp recovering (%.1f C)"
                                             " — probing early\n",
                                             cur / 10.0);
                                         break;
@@ -631,7 +662,7 @@ recover_from_fault(tuya_device_t *d, int target_c_x10)
                    the normal running state.  Check that the
                    E2/dry-run bit cleared and device is on. */
                 if ((f107 & FAULT_E2_MASK) != 0) {
-                                printf("  re-faulted after %d s"
+                                tprintf("  re-faulted after %d s"
                                     " (107=0x%02x, st=%s)\n",
                                     w + 2, f107, stat);
                                 tuya_turn_off(d, DPS_POWER);
@@ -641,7 +672,7 @@ recover_from_fault(tuya_device_t *d, int target_c_x10)
                 }
 
                 if (stuck) {
-                        printf("  probe successful — resuming\n");
+                        tprintf("  probe successful — resuming\n");
                         /* Re-assert target setpoint in case firmware
                            cleared it across the fault */
                         tuya_set_value_int(d, DPS_TARGET_TEMP,
@@ -669,6 +700,9 @@ static void
 wait_for_temp(tuya_device_t *d, int target_c_x10)
 {
         int first = 1;
+        /* Let device stabilise after power-on / set_temp before
+           polling — avoids false E2 trigger on transitional 107. */
+        sleep(5);
         for (;;) {
                 tuya_reconnect(d);
                 char *resp = tuya_status(d);
@@ -683,8 +717,7 @@ wait_for_temp(tuya_device_t *d, int target_c_x10)
                 parse_dp102(resp, status, sizeof(status));
                 tuya_free_string(resp);
 
-                if (dp107 != 0 || (status[0]
-                    && strcmp(status, "stop") == 0)) {
+                if ((dp107 & FAULT_E2_MASK) != 0) {
                         recover_from_fault(d, target_c_x10);
                         first = 1;
                         continue;
@@ -696,11 +729,11 @@ wait_for_temp(tuya_device_t *d, int target_c_x10)
                         continue;
                 }
                 if (abs(current - target_c_x10) <= DPS_TOLERANCE) {
-                        printf("  reached %.1f C\n", current / 10.0);
+                        vlog("reached %.1f C\n", current / 10.0);
                         return;
                 }
                 if (first) {
-                        printf("  waiting for water to reach %.1f C...\n",
+                        vlog("waiting for water to reach %.1f C...\n",
                             target_c_x10 / 10.0);
                         first = 0;
                 }
@@ -723,7 +756,7 @@ cmd_status(tuya_device_t *d)
                 fprintf(stderr, "error: no response from device\n");
                 return;
         }
-        printf("ISV-300W status:\n  %s\n\n", resp);
+        tprintf("ISV-300W status:\n  %s\n\n", resp);
 
         const char *dps = strstr(resp, "\"dps\"");
         if (!dps) { tuya_free_string(resp); return; }
@@ -765,17 +798,17 @@ cmd_status(tuya_device_t *d)
                 }
         }
 
-        printf("  Power:          %s\n", power ? "ON" : "OFF");
-        printf("  Status:         %s\n", status[0] ? status : "?");
-        printf("  Current:        %.1f C / %.1f F\n",
+        tprintf("  Power:          %s\n", power ? "ON" : "OFF");
+        tprintf("  Status:         %s\n", status[0] ? status : "?");
+        tprintf("  Current:        %.1f C / %.1f F\n",
             current / 10.0, c_to_f(current / 10.0));
-        printf("  Target:         %.1f C / %.1f F\n",
+        tprintf("  Target:         %.1f C / %.1f F\n",
             target / 10.0, c_to_f(target / 10.0));
-        printf("  Timer:          %d min (remaining: %d)\n", timer, remain);
-        printf("  Unit:           %s\n", unit ? "Celsius" : "Fahrenheit");
-        printf("  Fault:          %d\n", fault);
-        printf("  Recipe:         %d\n", recipe);
-        printf("  Calibration:    %.1f C\n", cal / 10.0);
+        tprintf("  Timer:          %d min (remaining: %d)\n", timer, remain);
+        tprintf("  Unit:           %s\n", unit ? "Celsius" : "Fahrenheit");
+        tprintf("  Fault:          %d\n", fault);
+        tprintf("  Recipe:         %d\n", recipe);
+        tprintf("  Calibration:    %.1f C\n", cal / 10.0);
         tuya_free_string(resp);
 }
 
@@ -789,12 +822,12 @@ cmd_read(tuya_device_t *d)
         }
         int val = parse_dp104(resp);
         if (val >= 0) {
-                printf("%.1f C / %.1f F — success.\n",
+                tprintf("%.1f C / %.1f F — success.\n",
                     val / 10.0, c_to_f(val / 10.0));
-                if (verbose) printf("  %s\n", resp);
+                if (verbose) tprintf("  %s\n", resp);
         } else {
-                printf("read — FAILED.\n");
-                printf("  %s\n", resp);
+                tprintf("read — FAILED.\n");
+                tprintf("  %s\n", resp);
         }
         tuya_free_string(resp);
 }
@@ -826,15 +859,16 @@ run_ramp(tuya_device_t *d, struct phase *phases, int nphases, bool poweroff)
                             pi + 1, ph->start / 10.0);
                         set_temp(d, ph->start);
                         wait_for_temp(d, ph->start);
+                        tprintf("temp %.1f C\n", ph->start / 10.0);
                         continue;
                 }
 
                 if (ph->is_pause) {
-                        printf("\n--- Pause for %d:%02d ---\n",
-                            ph->duration_secs / 60, ph->duration_secs % 60);
                         vlog("phase %d: pause %d:%02d\n",
                             pi + 1, ph->duration_secs / 60,
                             ph->duration_secs % 60);
+                        tprintf("pause %d:%02d\n",
+                            ph->duration_secs / 60, ph->duration_secs % 60);
                         sleep(ph->duration_secs);
                         continue;
                 }
@@ -849,16 +883,19 @@ run_ramp(tuya_device_t *d, struct phase *phases, int nphases, bool poweroff)
                         vlog("phase %d: hold %.1f C for %d:%02d\n",
                             pi + 1, ph->start / 10.0,
                             ph->duration_secs / 60, ph->duration_secs % 60);
-                        printf("\n--- Hold at %.1f C for %d:%02d ---\n",
-                            ph->start / 10.0,
-                            ph->duration_secs / 60, ph->duration_secs % 60);
 
                         set_temp(d, ph->start);
                         wait_for_temp(d, ph->start);
-
-                        printf("  holding at %.1f C for %d:%02d...\n",
-                            ph->start / 10.0,
-                            ph->duration_secs / 60, ph->duration_secs % 60);
+                        {
+                                int cur = read_current_temp(d);
+                                tprintf("hold %.1f C for %d:%02d"
+                                    " (currently %.1f C)\n",
+                                    ph->start / 10.0,
+                                    ph->duration_secs / 60,
+                                    ph->duration_secs % 60,
+                                    cur >= 0 ? cur / 10.0
+                                             : ph->start / 10.0);
+                        }
 
                         int hold_elapsed = 0;
                         int cold_since = -1;
@@ -880,8 +917,7 @@ run_ramp(tuya_device_t *d, struct phase *phases, int nphases, bool poweroff)
                                 parse_dp102(resp, status, sizeof(status));
                                 tuya_free_string(resp);
 
-                                if (dp107 != 0 || (status[0]
-                                    && strcmp(status, "stop") == 0)) {
+                                if ((dp107 & FAULT_E2_MASK) != 0) {
                                         recover_from_fault(d, ph->start);
                                         cold_since = -1;
                                         cold_max_delta = 0;
@@ -895,7 +931,7 @@ run_ramp(tuya_device_t *d, struct phase *phases, int nphases, bool poweroff)
                                         if (cold_since < 0) {
                                                 cold_since = hold_elapsed;
                                                 cold_max_delta = delta;
-                                                printf("  ! dropped to %.1f C"
+                                                tprintf("  ! dropped to %.1f C"
                                                     " (%.1f C below target)\n",
                                                     actual / 10.0, delta / 10.0);
                                         } else if (delta > cold_max_delta) {
@@ -904,7 +940,7 @@ run_ramp(tuya_device_t *d, struct phase *phases, int nphases, bool poweroff)
                                 } else if (cold_since >= 0
                                     && delta <= DPS_TOLERANCE) {
                                         int dur = hold_elapsed - cold_since;
-                                        printf("  recovered after %d:%02d"
+                                        tprintf("  recovered after %d:%02d"
                                             " (max deviation %.1f C)\n",
                                             dur / 60, dur % 60,
                                             cold_max_delta / 10.0);
@@ -918,8 +954,8 @@ run_ramp(tuya_device_t *d, struct phase *phases, int nphases, bool poweroff)
                             pi + 1, ph->start / 10.0, ph->end / 10.0,
                             ph->duration_secs / 60, ph->duration_secs % 60,
                             steps);
-                        printf("\n--- Ramp %.1f -> %.1f C over %d:%02d"
-                            " (%d steps of %.2f C) ---\n",
+                        tprintf("ramp %.1f -> %.1f C over %d:%02d"
+                            " (%d steps of %.2f C)\n",
                             ph->start / 10.0, ph->end / 10.0,
                             ph->duration_secs / 60, ph->duration_secs % 60,
                             steps, step_d / 10.0);
@@ -936,27 +972,23 @@ run_ramp(tuya_device_t *d, struct phase *phases, int nphases, bool poweroff)
                                 if (target < lo) target = lo;
                                 if (target > hi) target = hi;
 
-                                printf("[%3d/%d min] ", i, steps);
+                                vlog("[%3d/%d min] ", i, steps);
                                 sleep(60);
                                 tuya_reconnect(d);
                                 set_temp(d, target);
                                 int actual = read_current_temp(d);
                                 if (actual >= 0) {
-                                        printf("target %.1f C,"
-                                            " actual %.1f C",
-                                            target / 10.0, actual / 10.0);
-                                        if (abs(actual - target)
-                                            > DPS_TOLERANCE)
-                                                printf(" (catching up)");
-                                        printf("\n");
-                                } else {
-                                        printf("target %.1f C\n",
-                                            target / 10.0);
+                                        vlog("target %.1f C,"
+                                            " actual %.1f C%s\n",
+                                            target / 10.0, actual / 10.0,
+                                            (abs(actual - target)
+                                                > DPS_TOLERANCE)
+                                                ? " (catching up)" : "");
                                 }
                         }
 
                         if (remainder > 0) {
-                                printf("[holding %d sec] ", remainder);
+                                tprintf("[holding %d sec] ", remainder);
                                 sleep(remainder);
                         }
 
@@ -972,7 +1004,7 @@ run_ramp(tuya_device_t *d, struct phase *phases, int nphases, bool poweroff)
                 int elapsed = (int)(phase_end - phase_start);
                 if (elapsed > ph->duration_secs + 60) {
                         int overtime = elapsed - ph->duration_secs;
-                        printf("  phase took %d:%02d"
+                        tprintf("  phase took %d:%02d"
                             " (planned %d:%02d, +%d:%02d overtime)\n",
                             elapsed / 60, elapsed % 60,
                             ph->duration_secs / 60, ph->duration_secs % 60,
@@ -980,7 +1012,7 @@ run_ramp(tuya_device_t *d, struct phase *phases, int nphases, bool poweroff)
                 }
         }
 
-        printf("\ndone.\n");
+        tprintf("\ndone.\n");
         return 0;
 }
 
@@ -1039,6 +1071,7 @@ usage(const char *prog)
 int
 main(int argc, char **argv)
 {
+        start_time = time(NULL);
         const char *prog = progname(argv[0]);
         int opt, i;
         char config_path[512];
@@ -1089,7 +1122,7 @@ main(int argc, char **argv)
 
                 if (strcmp(cmd, "status") == 0) {
                         if (dry_run) {
-                                printf("[dry run] status\n"); continue;
+                                tprintf("[dry run] status\n"); continue;
                         }
                         tuya_device_t *d = tuya_create(cfg.device_id,
                             cfg.ip, cfg.local_key, cfg.version);
@@ -1104,7 +1137,7 @@ main(int argc, char **argv)
 
                 if (strcmp(cmd, "read") == 0) {
                         if (dry_run) {
-                                printf("[dry run] read\n"); continue;
+                                tprintf("[dry run] read\n"); continue;
                         }
                         tuya_device_t *d = tuya_create(cfg.device_id,
                             cfg.ip, cfg.local_key, cfg.version);
@@ -1119,7 +1152,7 @@ main(int argc, char **argv)
 
                 if (strcmp(cmd, "off") == 0) {
                         if (dry_run) {
-                                printf("[dry run] off\n"); continue;
+                                tprintf("[dry run] off\n"); continue;
                         }
                         tuya_device_t *d = tuya_create(cfg.device_id,
                             cfg.ip, cfg.local_key, cfg.version);
@@ -1166,7 +1199,7 @@ main(int argc, char **argv)
                                 continue;
                         }
                         if (dry_run) {
-                                printf("[dry run] temp %.1f C\n", t / 10.0);
+                                tprintf("[dry run] temp %.1f C\n", t / 10.0);
                                 continue;
                         }
                         tuya_device_t *d = tuya_create(cfg.device_id,
@@ -1178,11 +1211,12 @@ main(int argc, char **argv)
                         {
                                 char *resp = tuya_turn_on(d, DPS_POWER);
                                 if (resp) {
-                                        if (verbose) printf("  %s\n", resp);
+                                        if (verbose) tprintf("  %s\n", resp);
                                         tuya_free_string(resp);
                                 }
                         }
                         set_temp(d, t);
+                        tprintf("temp %.1f C\n", t / 10.0);
                         if (i < argc) wait_for_temp(d, t);
                         tuya_disconnect(d); tuya_destroy(d);
                         continue;
@@ -1274,31 +1308,38 @@ main(int argc, char **argv)
         /* Execute accumulated phases */
         if (nphases > 0) {
                 if (dry_run) {
-                        printf("[dry run]\n");
+                        tprintf("[dry run]\n");
                         for (int p = 0; p < nphases; p++) {
                                 struct phase *ph = &phases[p];
                                 if (ph->is_temp) {
-                                        printf("  temp  %.1f C\n",
+                                        tprintf("  temp  %.1f C\n",
                                             ph->start / 10.0);
                                         continue;
                                 }
                                 if (ph->is_pause) {
-                                        printf("  pause %d:%02d\n",
+                                        tprintf("  pause %d:%02d\n",
                                             ph->duration_secs / 60,
                                             ph->duration_secs % 60);
                                         continue;
                                 }
                                 const char *label =
                                     ph->is_hold ? "hold" : "ramp";
-                                printf("  %s  %.1f C", label,
+                                char buf[128];
+                                int len = snprintf(buf, sizeof(buf),
+                                    "  %s  %.1f C", label,
                                     ph->start / 10.0);
                                 if (!ph->is_hold)
-                                        printf(" -> %.1f C", ph->end / 10.0);
-                                printf("  %d:%02d\n",
+                                        len += snprintf(buf + len,
+                                            sizeof(buf) - (size_t)len,
+                                            " -> %.1f C", ph->end / 10.0);
+                                snprintf(buf + len,
+                                    sizeof(buf) - (size_t)len,
+                                    "  %d:%02d\n",
                                     ph->duration_secs / 60,
                                     ph->duration_secs % 60);
+                                tprintf("%s", buf);
                         }
-                        printf("  off (implicit)\n");
+                        tprintf("  off (implicit)\n");
                         free(phases);
                         return 0;
                 }
@@ -1318,11 +1359,11 @@ main(int argc, char **argv)
                 signal(SIGTERM, signal_handler);
                 char *resp = tuya_turn_on(d, DPS_POWER);
                 if (resp) {
-                        printf("power on — success.\n");
-                        if (verbose) printf("  %s\n", resp);
+                        tprintf("power on — success.\n");
+                        if (verbose) tprintf("  %s\n", resp);
                         tuya_free_string(resp);
                 } else {
-                        printf("power on — FAILED.\n");
+                        tprintf("power on — FAILED.\n");
                 }
                 if (verbose) print_response(tuya_status(d));
 
@@ -1334,5 +1375,6 @@ main(int argc, char **argv)
         }
 
 
+        print_elapsed();
         return 0;
 }
