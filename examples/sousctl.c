@@ -471,6 +471,11 @@ set_temp(tuya_device_t *d, int target_c_x10)
         double c = target_c_x10 / 10.0;
         vlog("target %.1f C / %.1f F\n", c, c_to_f(c));
         char *resp = tuya_set_value_int(d, DPS_TARGET_TEMP, target_c_x10);
+        if (!resp) {
+                /* Device may be busy — retry once after a short delay */
+                sleep(2);
+                resp = tuya_set_value_int(d, DPS_TARGET_TEMP, target_c_x10);
+        }
         if (resp) {
                 vlog("target %.1f C / %.1f F — success.\n", c, c_to_f(c));
                 if (verbose) tprintf("  %s\n", resp);
@@ -484,12 +489,16 @@ static void
 power_off(tuya_device_t *d)
 {
         char *resp = tuya_turn_off(d, DPS_POWER);
+        if (!resp) {
+                sleep(2);
+                resp = tuya_turn_off(d, DPS_POWER);
+        }
         if (resp) {
-                tprintf("  power off — success.\n");
+                tprintf("power off\n");
                 if (verbose) tprintf("  %s\n", resp);
                 tuya_free_string(resp);
         } else {
-                tprintf("  power off — FAILED.\n");
+                tprintf("power off — FAILED.\n");
         }
 }
 
