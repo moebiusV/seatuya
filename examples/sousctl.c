@@ -162,9 +162,30 @@ cleanup_poweroff(void)
         tuya_device_t *d = atexit_dev;
         if (!d) return;
         atexit_dev = NULL;
-        fprintf(stderr, "\n");
+        tprintf("\nshutting down\n");
+        /* Retry turn-off: the device may be slow to respond when
+           its PID is wound up from a long ramp. */
+        for (int attempt = 0; attempt < 3; attempt++) {
+                if (attempt > 0) sleep(2);
+                char *resp = tuya_turn_off(d, DPS_POWER);
+                if (resp) {
+                        tuya_free_string(resp);
+                        /* Verify it actually turned off */
+                        sleep(1);
+                        char *s = tuya_status(d);
+                        if (s) {
+                                const char *p = strstr(s, "\"101\"");
+                                bool off = true;
+                                if (p) {
+                                        p = strchr(p, ':');
+                                        if (p) off = (strncmp(p+1,"false",5)==0);
+                                }
+                                tuya_free_string(s);
+                                if (off) break;
+                        }
+                }
+        }
         print_elapsed();
-        tuya_turn_off(d, DPS_POWER);
         tuya_disconnect(d);
         tuya_destroy(d);
 }
