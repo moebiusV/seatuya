@@ -58,6 +58,7 @@ static bool verbose = false;
 static tuya_device_t *atexit_dev = NULL;
 static char override_ip[256] = {0};
 static time_t start_time;
+static volatile sig_atomic_t g_interrupted = 0;
 
 static void
 vlog(const char *fmt, ...)
@@ -156,46 +157,44 @@ print_elapsed(void)
             elapsed / 3600, (elapsed % 3600) / 60, elapsed % 60);
 }
 
-static void
-cleanup_poweroff(void)
+/*
+ * Verified power-off with reconnect and DP-101 readback.
+ * Retries up to 6 times with exponential backoff (1,2,4,8,16,32 s).
+ * Returns 0 on confirmed off, -1 if unconfirmed.
+ */
+static int
+verified_off(tuya_device_t *d)
 {
-        tuya_device_t *d = atexit_dev;
-        if (!d) return;
-        atexit_dev = NULL;
-        tprintf("\nshutting down\n");
-        /* Retry turn-off: the device may be slow to respond when
-           its PID is wound up from a long ramp. */
-        for (int attempt = 0; attempt < 3; attempt++) {
-                if (attempt > 0) sleep(2);
-                char *resp = tuya_turn_off(d, DPS_POWER);
-                if (resp) {
-                        tuya_free_string(resp);
-                        /* Verify it actually turned off */
-                        sleep(1);
-                        char *s = tuya_status(d);
-                        if (s) {
-                                const char *p = strstr(s, "\"101\"");
-                                bool off = true;
-                                if (p) {
-                                        p = strchr(p, ':');
-                                        if (p) off = (strncmp(p+1,"false",5)==0);
-                                }
-                                tuya_free_string(s);
-                                if (off) break;
+        for (int i = 0; i < 6; i++) {
+                tuya_reconnect(d);
+                char *r = tuya_turn_off(d, DPS_POWER);
+                if (r) tuya_free_string(r);
+                sleep(1);
+                tuya_reconnect(d);
+                char *s = tuya_status(d);
+                if (s) {
+                        const char *p = strstr(s, "\"101\"");
+                        bool off = p && strstr(p, "false");
+                        tuya_free_string(s);
+                        if (off) {
+                                tprintf("power off — confirmed\n");
+                                return 0;
                         }
                 }
+                if (g_interrupted) break;
+                sleep(1 << i);
         }
-        print_elapsed();
-        tuya_disconnect(d);
-        tuya_destroy(d);
+        tprintf("ALARM: could not confirm power off"
+            " — device may still be heating\n");
+        return -1;
 }
 
 static void
 signal_handler(int sig)
 {
         (void)sig;
-        cleanup_poweroff();
-        _exit(1);
+        if (g_interrupted++)
+                _exit(1);   /* second ^C: give up immediately */
 }
 
 /* ------------------------------------------------------------------ */
@@ -648,6 +647,7 @@ recover_from_fault(tuya_device_t *d, int target_c_x10)
                         int elapsed = 0;
                         while (elapsed < delay) {
                                 sleep(FAULT_POLL_SEC);
+                                if (g_interrupted) goto shutdown;
                                 elapsed += FAULT_POLL_SEC;
                                 tuya_reconnect(d);
                                 char *resp = tuya_status(d);
@@ -675,6 +675,7 @@ recover_from_fault(tuya_device_t *d, int target_c_x10)
                 bool stuck = true;
                 for (int w = 0; w < PROBE_WINDOW_SEC; w += 2) {
                         sleep(2);
+                        if (g_interrupted) goto shutdown;
                         char *resp = tuya_status(d);
                         if (!resp) continue;
                         int  f107 = 0;
@@ -723,6 +724,9 @@ recover_from_fault(tuya_device_t *d, int target_c_x10)
         }
         print_elapsed();
         exit(1);
+
+shutdown:
+        return;
 }
 
 /*
@@ -761,6 +765,7 @@ wait_for_temp(tuya_device_t *d, int target_c_x10)
                 if (current < 0) {
                         vlog("error reading temp, retrying...\n");
                         sleep(POLL_INTERVAL_SEC);
+                        if (g_interrupted) return;
                         continue;
                 }
                 if (abs(current - target_c_x10) <= DPS_TOLERANCE) {
@@ -776,6 +781,7 @@ wait_for_temp(tuya_device_t *d, int target_c_x10)
                     current / 10.0, target_c_x10 / 10.0,
                     (target_c_x10 - current) / 10.0);
                 sleep(POLL_INTERVAL_SEC);
+                if (g_interrupted) return;
         }
 }
 
@@ -905,6 +911,7 @@ run_ramp(tuya_device_t *d, struct phase *phases, int nphases, bool poweroff)
                         tprintf("pause %d:%02d\n",
                             ph->duration_secs / 60, ph->duration_secs % 60);
                         sleep(ph->duration_secs);
+                        if (g_interrupted) break;
                         continue;
                 }
 
@@ -941,6 +948,7 @@ run_ramp(tuya_device_t *d, struct phase *phases, int nphases, bool poweroff)
                                 if (hold_elapsed + chunk > ph->duration_secs)
                                         chunk = ph->duration_secs - hold_elapsed;
                                 sleep(chunk);
+                                if (g_interrupted) break;
                                 hold_elapsed += chunk;
 
                                 tuya_reconnect(d);
@@ -1009,6 +1017,7 @@ run_ramp(tuya_device_t *d, struct phase *phases, int nphases, bool poweroff)
 
                                 vlog("[%3d/%d min] ", i, steps);
                                 sleep(60);
+                                if (g_interrupted) break;
                                 tuya_reconnect(d);
                                 set_temp(d, target);
                                 int actual = read_current_temp(d);
@@ -1025,6 +1034,7 @@ run_ramp(tuya_device_t *d, struct phase *phases, int nphases, bool poweroff)
                         if (remainder > 0) {
                                 tprintf("[holding %d sec] ", remainder);
                                 sleep(remainder);
+                                if (g_interrupted) break;
                         }
 
                         /* Catch-up at phase boundary:
@@ -1045,6 +1055,7 @@ run_ramp(tuya_device_t *d, struct phase *phases, int nphases, bool poweroff)
                             ph->duration_secs / 60, ph->duration_secs % 60,
                             overtime / 60, overtime % 60);
                 }
+                if (g_interrupted) break;
         }
 
         tprintf("\ndone.\n");
@@ -1389,7 +1400,6 @@ main(int argc, char **argv)
 
                 vlog("connected to %s (v%s)\n", cfg.ip, cfg.version);
                 atexit_dev = d;
-                atexit(cleanup_poweroff);
                 signal(SIGINT, signal_handler);
                 signal(SIGTERM, signal_handler);
                 tuya_turn_on(d, DPS_POWER);
@@ -1410,8 +1420,13 @@ main(int argc, char **argv)
                 }
 
                 int r = run_ramp(d, phases, nphases, true);
-                /* implicit off at end of chain */
-                if (!dry_run) cleanup_poweroff();
+                /* implicit off at end of chain — verified */
+                if (!dry_run) {
+                        verified_off(d);
+                        print_elapsed();
+                        tuya_disconnect(d);
+                        tuya_destroy(d);
+                }
                 free(phases);
                 return r;
         }
