@@ -94,6 +94,35 @@ enum inkbird_dps {
 static const int DPS_TOLERANCE     = 5;
 static const int POLL_INTERVAL_SEC = 60;
 
+/* Fault recovery: probe backoff schedule in seconds, capped at last value.
+   E2 (dry-run / low-water) is auto-recoverable with unlimited attempts.
+   Non-E2 faults get at most MAX_NON_E2_PROBES attempts then alarm. */
+static const int PROBE_BACKOFF[]   = {30, 60, 120};
+static const int PROBE_BACKOFF_CAP = 120;
+static const int PROBE_WINDOW_SEC  = 10;
+static const int FAULT_POLL_SEC    = 5;
+static const int MAX_NON_E2_PROBES = 2;
+
+/* DP 107 fault bitfield.  Observed value 3 (= bits 0+1) on ISV-300W
+   for both E2 (dry-run) and E3 (low-water).  Bit 1 is the E2 indicator
+   per the standard Tuya bit-per-E-code convention. */
+static const int FAULT_E2_MASK     = 2;   /* bit 1 = dry-run / low-water */
+
+static void
+print_fault_bits(int code)
+{
+        if (code == 0) { printf("none"); return; }
+        for (int b = 0; b < 8; b++)
+                if (code & (1 << b))
+                        printf("E%d ", b + 1);
+        printf("(raw 0x%02x)", code);
+}
+
+/* Temperature heuristic: if bath temp rises within this many decicelsius
+   of the pre-fault temperature while faulted, the stick is probably
+   re-immersed — probe immediately. */
+static const int REIMMERSE_DELTA   = 30;  /* 3.0 C */
+
 static void
 cleanup_poweroff(void)
 {
@@ -449,6 +478,42 @@ parse_dp104(const char *json)
 }
 
 /*
+ * Extract DP 102 (status string) from a status JSON string.
+ * Writes up to bufsz-1 chars into buf, returns buf on success or NULL.
+ */
+static const char *
+parse_dp102(const char *json, char *buf, size_t bufsz)
+{
+        const char *p = strstr(json, "\"102\"");
+        if (!p) return NULL;
+        p = strchr(p, ':');
+        if (!p) return NULL;
+        if (*p != '"') return NULL;
+        p++;
+        const char *end = strchr(p, '"');
+        if (!end) return NULL;
+        size_t len = (size_t)(end - p);
+        if (len >= bufsz) len = bufsz - 1;
+        memcpy(buf, p, len);
+        buf[len] = '\0';
+        return buf;
+}
+
+/*
+ * Extract DP 107 (fault bitfield) from a status JSON string.
+ * Returns the raw fault code, or 0 if not found.
+ */
+static int
+parse_dp107(const char *json)
+{
+        const char *p = strstr(json, "\"107\"");
+        if (!p) return 0;
+        p = strchr(p, ':');
+        if (!p) return 0;
+        return (int)strtol(p + 1, NULL, 10);
+}
+
+/*
  * Read current water temperature (DP 104) from the device.
  * Returns Celsius * 10 on success, or -1 on error.
  */
@@ -463,8 +528,141 @@ read_current_temp(tuya_device_t *d)
 }
 
 /*
+ * Fault recovery state machine.
+ *
+ * RUNNING -> FAULTED (107 != 0) -> PROBING -> RUNNING (or ALARM).
+ *
+ * E2 (dry-run / low-water, bit 1) gets unlimited probe attempts with
+ * backoff 30 -> 60 -> 120 s cap.  Non-E2 faults get at most 2 probes.
+ *
+ * During FAULTED, polls at 5 s.  If bath temperature rises to within
+ * 3 C of the pre-fault reading, probes immediately (the stick is
+ * probably re-immersed).  Each probe sends CONTROL_NEW 101=true and
+ * observes for 10 s: 107==0 and 102=="working" sustained = success.
+ *
+ * On success, re-asserts the target setpoint (DP 103) in case the
+ * firmware cleared it.  Returns normally so the caller resumes its
+ * ramp/hold loop.  On ALARM, exits the process.
+ */
+static void
+recover_from_fault(tuya_device_t *d, int target_c_x10)
+{
+        int pre_fault_temp = target_c_x10;  /* best guess at time of fault */
+        int fault_code = 0;
+        bool is_e2;
+        int max_probes, probe_count = 0, backoff_idx = 0;
+        int nlevels = (int)(sizeof(PROBE_BACKOFF) / sizeof(PROBE_BACKOFF[0]));
+
+        /* Read fault code to classify */
+        {
+                char *resp = tuya_status(d);
+                if (resp) {
+                        const char *p = strstr(resp, "\"107\"");
+                        if (p) {
+                                p = strchr(p, ':');
+                                if (p) fault_code = (int)strtol(p+1,NULL,10);
+                        }
+                        /* Snapshot current temp for heuristic */
+                        int cur = parse_dp104(resp);
+                        if (cur >= 0) pre_fault_temp = cur;
+                        tuya_free_string(resp);
+                }
+        }
+
+        is_e2     = (fault_code & FAULT_E2_MASK) != 0;
+        max_probes = is_e2 ? 9999 : MAX_NON_E2_PROBES;
+
+        printf("  ! device faulted: ");
+        print_fault_bits(fault_code);
+        printf(" (%s)\n",
+            is_e2 ? "auto-recoverable" : "non-E2 — limited retries");
+
+        /* Turn off to silence beeping */
+        tuya_turn_off(d, DPS_POWER);
+
+        while (probe_count < max_probes) {
+                int delay = (backoff_idx < nlevels)
+                    ? PROBE_BACKOFF[backoff_idx] : PROBE_BACKOFF_CAP;
+
+                /* Wait with temperature heuristic */
+                {
+                        int elapsed = 0;
+                        while (elapsed < delay) {
+                                sleep(FAULT_POLL_SEC);
+                                elapsed += FAULT_POLL_SEC;
+                                tuya_reconnect(d);
+                                char *resp = tuya_status(d);
+                                if (!resp) continue;
+                                int cur = parse_dp104(resp);
+                                tuya_free_string(resp);
+                                if (cur >= 0
+                                    && (pre_fault_temp - cur)
+                                        <= REIMMERSE_DELTA) {
+                                        printf("  temp recovering (%.1f C)"
+                                            " — probing early\n",
+                                            cur / 10.0);
+                                        break;
+                                }
+                        }
+                }
+
+                /* Probe */
+                probe_count++;
+                vlog("probe %d/%d: restarting\n", probe_count, max_probes);
+                tuya_reconnect(d);
+                tuya_turn_on(d, DPS_POWER);
+
+                /* Observe for PROBE_WINDOW_SEC */
+                bool stuck = true;
+                for (int w = 0; w < PROBE_WINDOW_SEC; w += 2) {
+                        sleep(2);
+                        char *resp = tuya_status(d);
+                        if (!resp) continue;
+                        int  f107 = 0;
+                        char stat[32] = {0};
+                        {
+                                const char *p=strstr(resp,"\"107\"");
+                                if(p){p=strchr(p,':');
+                                    if(p)f107=(int)strtol(p+1,NULL,10);}
+                        }
+                        parse_dp102(resp, stat, sizeof(stat));
+                        tuya_free_string(resp);
+                        /* ISV-300W: after recovery, 107=1 (not 0) is
+                   the normal running state.  Check that the
+                   E2/dry-run bit cleared and device is on. */
+                if ((f107 & FAULT_E2_MASK) != 0) {
+                                printf("  re-faulted after %d s"
+                                    " (107=0x%02x, st=%s)\n",
+                                    w + 2, f107, stat);
+                                tuya_turn_off(d, DPS_POWER);
+                                stuck = false;
+                                break;
+                        }
+                }
+
+                if (stuck) {
+                        printf("  probe successful — resuming\n");
+                        /* Re-assert target setpoint in case firmware
+                           cleared it across the fault */
+                        tuya_set_value_int(d, DPS_TARGET_TEMP,
+                            target_c_x10);
+                        return;
+                }
+
+                /* Advance backoff */
+                if (backoff_idx < nlevels - 1) backoff_idx++;
+        }
+
+        /* ALARM: max probes exhausted (non-E2 path only) */
+        fprintf(stderr, "sousctl: ALARM — max probes exhausted,"
+            " device left off\n");
+        exit(1);
+}
+
+/*
  * Poll the device until current temperature reaches target (Celsius * 10)
  * within DPS_TOLERANCE.  Polls every POLL_INTERVAL_SEC seconds.
+ * Monitors for device faults (low water, etc.) and auto-recovers.
  * No timeout -- if the heater is slow, we wait.  SIGINT to abort.
  */
 static void
@@ -473,7 +671,25 @@ wait_for_temp(tuya_device_t *d, int target_c_x10)
         int first = 1;
         for (;;) {
                 tuya_reconnect(d);
-                int current = read_current_temp(d);
+                char *resp = tuya_status(d);
+                if (!resp) {
+                        vlog("error reading status, retrying...\n");
+                        sleep(POLL_INTERVAL_SEC);
+                        continue;
+                }
+                int current = parse_dp104(resp);
+                int dp107   = parse_dp107(resp);
+                char status[32];
+                parse_dp102(resp, status, sizeof(status));
+                tuya_free_string(resp);
+
+                if (dp107 != 0 || (status[0]
+                    && strcmp(status, "stop") == 0)) {
+                        recover_from_fault(d, target_c_x10);
+                        first = 1;
+                        continue;
+                }
+
                 if (current < 0) {
                         vlog("error reading temp, retrying...\n");
                         sleep(POLL_INTERVAL_SEC);
@@ -591,6 +807,8 @@ struct phase {
         int    start, end;       /* Celsius * 10 */
         int    duration_secs;
         bool   is_hold;
+        bool   is_pause;
+        bool   is_temp;
 };
 
 static int
@@ -602,6 +820,24 @@ run_ramp(tuya_device_t *d, struct phase *phases, int nphases, bool poweroff)
                 int steps    = ph->duration_secs / 60;
                 int remainder = ph->duration_secs % 60;
                 time_t phase_start = time(NULL);
+
+                if (ph->is_temp) {
+                        vlog("phase %d: temp %.1f C\n",
+                            pi + 1, ph->start / 10.0);
+                        set_temp(d, ph->start);
+                        wait_for_temp(d, ph->start);
+                        continue;
+                }
+
+                if (ph->is_pause) {
+                        printf("\n--- Pause for %d:%02d ---\n",
+                            ph->duration_secs / 60, ph->duration_secs % 60);
+                        vlog("phase %d: pause %d:%02d\n",
+                            pi + 1, ph->duration_secs / 60,
+                            ph->duration_secs % 60);
+                        sleep(ph->duration_secs);
+                        continue;
+                }
 
                 if (steps < 1 && remainder == 0)
                         steps = 1;
@@ -636,7 +872,22 @@ run_ramp(tuya_device_t *d, struct phase *phases, int nphases, bool poweroff)
                                 hold_elapsed += chunk;
 
                                 tuya_reconnect(d);
-                                int actual = read_current_temp(d);
+                                char *resp = tuya_status(d);
+                                if (!resp) continue;
+                                int actual = parse_dp104(resp);
+                                int dp107  = parse_dp107(resp);
+                                char status[32];
+                                parse_dp102(resp, status, sizeof(status));
+                                tuya_free_string(resp);
+
+                                if (dp107 != 0 || (status[0]
+                                    && strcmp(status, "stop") == 0)) {
+                                        recover_from_fault(d, ph->start);
+                                        cold_since = -1;
+                                        cold_max_delta = 0;
+                                        continue;
+                                }
+
                                 if (actual < 0) continue;
 
                                 int delta = ph->start - actual;
@@ -752,6 +1003,7 @@ usage(const char *prog)
 "  temp TEMP             set target temperature\n"
 "  ramp START END TIME   linear temperature ramp\n"
 "  hold TEMP TIME        hold at temperature\n"
+"  pause TIME            pause (device keeps running)\n"
 "  off                   power off\n"
 "\n"
 "Temperature: NUMBER with optional C or F suffix (default: Celsius).\n"
@@ -892,6 +1144,27 @@ main(int argc, char **argv)
                                     argv[i - 1]);
                                 free(phases); return 1;
                         }
+                        /* If phases already exist, accumulate so temp
+                           interleaves correctly with ramp/hold/pause. */
+                        if (nphases > 0) {
+                                struct phase ph;
+                                memset(&ph, 0, sizeof(ph));
+                                ph.start   = t;
+                                ph.end     = t;
+                                ph.is_temp = true;
+                                if (nphases >= nalloc) {
+                                        nalloc = nalloc ? nalloc * 2 : 4;
+                                        phases = realloc(phases,
+                                            (size_t)nalloc * sizeof(*phases));
+                                        if (!phases) {
+                                                fprintf(stderr,
+                                                    "error: out of memory\n");
+                                                return 1;
+                                        }
+                                }
+                                phases[nphases++] = ph;
+                                continue;
+                        }
                         if (dry_run) {
                                 printf("[dry run] temp %.1f C\n", t / 10.0);
                                 continue;
@@ -966,6 +1239,34 @@ main(int argc, char **argv)
                         continue;
                 }
 
+                if (strcmp(cmd, "pause") == 0) {
+                        if (i >= argc) {
+                                fprintf(stderr, "error: pause needs TIME\n");
+                                free(phases); return 1;
+                        }
+                        bool ok;
+                        struct phase ph;
+                        memset(&ph, 0, sizeof(ph));
+                        ph.is_pause = true;
+                        ph.duration_secs = parse_duration(argv[i++], &ok);
+                        if (!ok || ph.duration_secs < 1) {
+                                fprintf(stderr, "error: bad duration '%s'\n",
+                                    argv[i - 1]);
+                                free(phases); return 1;
+                        }
+                        if (nphases >= nalloc) {
+                                nalloc = nalloc ? nalloc * 2 : 4;
+                                phases = realloc(phases,
+                                    (size_t)nalloc * sizeof(*phases));
+                                if (!phases) {
+                                        fprintf(stderr, "error: out of memory\n");
+                                        return 1;
+                                }
+                        }
+                        phases[nphases++] = ph;
+                        continue;
+                }
+
                 fprintf(stderr, "error: unknown command '%s'\n", cmd);
                 usage(prog); free(phases); return 1;
         }
@@ -976,6 +1277,17 @@ main(int argc, char **argv)
                         printf("[dry run]\n");
                         for (int p = 0; p < nphases; p++) {
                                 struct phase *ph = &phases[p];
+                                if (ph->is_temp) {
+                                        printf("  temp  %.1f C\n",
+                                            ph->start / 10.0);
+                                        continue;
+                                }
+                                if (ph->is_pause) {
+                                        printf("  pause %d:%02d\n",
+                                            ph->duration_secs / 60,
+                                            ph->duration_secs % 60);
+                                        continue;
+                                }
                                 const char *label =
                                     ph->is_hold ? "hold" : "ramp";
                                 printf("  %s  %.1f C", label,
