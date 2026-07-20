@@ -1370,15 +1370,22 @@ main(int argc, char **argv)
                 atexit(cleanup_poweroff);
                 signal(SIGINT, signal_handler);
                 signal(SIGTERM, signal_handler);
-                char *resp = tuya_turn_on(d, DPS_POWER);
-                if (resp) {
-                        tprintf("power on — success.\n");
-                        if (verbose) tprintf("  %s\n", resp);
-                        tuya_free_string(resp);
-                } else {
-                        tprintf("power on — FAILED.\n");
+                tuya_turn_on(d, DPS_POWER);
+                sleep(2);
+                {
+                        char *s = tuya_status(d);
+                        bool on = false;
+                        if (s) {
+                                const char *p = strstr(s, "\"101\"");
+                                if (p) {
+                                        p = strchr(p, ':');
+                                        if (p) on = (strncmp(p+1,"true",4)==0);
+                                }
+                                if (verbose) tprintf("  %s\n", s);
+                                tuya_free_string(s);
+                        }
+                        tprintf("power %s\n", on ? "on" : "OFF — check device");
                 }
-                if (verbose) print_response(tuya_status(d));
 
                 int r = run_ramp(d, phases, nphases, true);
                 /* implicit off at end of chain */
