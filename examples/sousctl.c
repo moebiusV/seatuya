@@ -1357,26 +1357,6 @@ main(int argc, char **argv)
                 atexit(cleanup_poweroff);
                 signal(SIGINT, signal_handler);
                 signal(SIGTERM, signal_handler);
-                /* Check for pre-existing fault before power-on, so we
-                   don't trigger a beep by restarting into a dry pot. */
-                {
-                        char *pre = tuya_status(d);
-                        if (pre) {
-                                int f = parse_dp107(pre);
-                                if ((f & FAULT_E2_MASK) != 0) {
-                                        /* Use first phase's target for
-                                           recovery; if no phases, read
-                                           current target from device. */
-                                        int tgt = phases[0].start;
-                                        if (tgt == 0)
-                                                tgt = 330; /* fallback */
-                                        tuya_free_string(pre);
-                                        recover_from_fault(d, tgt);
-                                } else {
-                                        tuya_free_string(pre);
-                                }
-                        }
-                }
                 char *resp = tuya_turn_on(d, DPS_POWER);
                 if (resp) {
                         tprintf("power on — success.\n");
