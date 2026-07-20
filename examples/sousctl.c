@@ -985,12 +985,6 @@ run_ramp(tuya_device_t *d, struct phase *phases, int nphases, bool poweroff)
                                     ? ph->end   : ph->start;
                                 if (target < lo) target = lo;
                                 if (target > hi) target = hi;
-                                /* Last step: back off 1 C to prevent
-                                   PID integral windup overshoot.
-                                   Thermal mass carries it the rest. */
-                                if (i == steps && steps > 1
-                                    && ph->end > ph->start)
-                                        target = hi - 10;
 
                                 vlog("[%3d/%d min] ", i, steps);
                                 sleep(60);
