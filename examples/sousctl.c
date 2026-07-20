@@ -122,20 +122,23 @@ static const int MAX_NON_E2_PROBES = 2;
    per the standard Tuya bit-per-E-code convention. */
 static const int FAULT_E2_MASK     = 2;   /* bit 1 = dry-run / low-water */
 
-static void
-print_fault_bits(int code)
+static const char *
+fault_bits_str(int code, char *buf, size_t bufsz)
 {
-        /* ISV-300W: bit 0 is the run/active indicator (always set
-           when powered on), not a fault.  Only bits 1+ are errors. */
         int faults = code & ~1;
+        int len = 0;
         if (faults == 0) {
-                tprintf("none (running, raw 0x%02x)", code);
-                return;
+                snprintf(buf, bufsz, "none (running, raw 0x%02x)", code);
+        } else {
+                for (int b = 1; b < 8; b++)
+                        if (code & (1 << b))
+                                len += snprintf(buf + len,
+                                    bufsz - (size_t)len,
+                                    "E%d ", b + 1);
+                snprintf(buf + len, bufsz - (size_t)len,
+                    "(raw 0x%02x)", code);
         }
-        for (int b = 1; b < 8; b++)
-                if (code & (1 << b))
-                        tprintf("E%d ", b + 1);
-        tprintf("(raw 0x%02x)", code);
+        return buf;
 }
 
 /* Temperature heuristic: if bath temp rises within this many decicelsius
@@ -603,13 +606,13 @@ recover_from_fault(tuya_device_t *d, int target_c_x10)
         is_e2     = (fault_code & FAULT_E2_MASK) != 0;
         max_probes = is_e2 ? 9999 : MAX_NON_E2_PROBES;
 
-        tprintf("  ! device faulted: ");
-        print_fault_bits(fault_code);
-        if (is_e2)
-                tprintf(" — refill water and device will recover\n");
-        else
-                tprintf(" — check device, max %d restart attempts\n",
-                    MAX_NON_E2_PROBES);
+        {
+                char fb[64];
+                tprintf("  ! device faulted: %s — %s\n",
+                    fault_bits_str(fault_code, fb, sizeof(fb)),
+                    is_e2 ? "refill water and device will recover"
+                          : "check device, limited retries");
+        }
 
         /* Turn off to silence beeping */
         tuya_turn_off(d, DPS_POWER);
@@ -688,11 +691,14 @@ recover_from_fault(tuya_device_t *d, int target_c_x10)
         }
 
         /* ALARM: max probes exhausted (non-E2 path only) */
-        tprintf("ALARM: ");
-        print_fault_bits(fault_code);
-        tprintf(" — max %d probes failed, device left off."
-            "  Check device and restart manually.\n",
-            MAX_NON_E2_PROBES);
+        {
+                char fb[64];
+                tprintf("ALARM: %s — max %d probes failed,"
+                    " device left off."
+                    "  Check device and restart manually.\n",
+                    fault_bits_str(fault_code, fb, sizeof(fb)),
+                    MAX_NON_E2_PROBES);
+        }
         print_elapsed();
         exit(1);
 }
