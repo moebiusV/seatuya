@@ -195,6 +195,7 @@ AC_CONFIG_FILES([Makefile
                  bindings/fortran/Makefile\
                  bindings/cobol/Makefile\
                  bindings/algol68/Makefile
+                 bindings/squeak/Makefile
                  bindings/bqn/Makefile
                  src/Makefile
                  include/Makefile
