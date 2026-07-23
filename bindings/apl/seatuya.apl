@@ -1,66 +1,137 @@
-⍝ seatuya.apl — Dyalog APL FFI bindings for libseatuya
+⍝ seatuya.apl -- Dyalog APL FFI bindings for libseatuya
 ⍝
-⍝ Dyalog APL binding using ⎕NA (Name Association) for C interop.
-⍝ The ⎕NA system function declares a C function and returns a
-⍝ namespace of monadic/dyadic derived functions.
+⍝ Uses ⎕NA (Name Association) for direct C function calls with
+⍝ configurable library path (respects SEATUYA_LIB env var).
 ⍝
 ⍝ Usage:
-⍝   ⎕←seatuya.version
-⍝   dev←seatuya.create deviceId ip localKey '3.4'
-⍝   ⎕←dev seatuya.turnOn 1
-⍝   seatuya.destroy dev
+⍝   seatuya.Init''
+⍝   dev←seatuya.Create 'devid' '192.168.1.100' 'localkey' '3.4'
+⍝   seatuya.Destroy dev
+⍝
+⍝ NOTE: C functions returning malloc'd strings (status, turn_on, etc.)
+⍝ use 'T' result type (auto-converted to APL char vector). The
+⍝ original C memory is leaked -- Dyalog's ⎕NA does not expose the
+⍝ raw pointer after conversion.  Negligible in short-lived scripts.
 
 :Namespace seatuya
     ⎕IO←0
 
-    ⍝ Library path
-    lib←{6::'libseatuya.so' ⋄ ⊃⎕SH'echo $SEATUYA_LIB'}⍬
+    ═══════════════════════════════════════════════════════════
+    ⍝ Initialization (must be called before any other function)
+    ═══════════════════════════════════════════════════════════
 
-    ⍝ Function declarations
-    version←{lib ⎕NA'I4 tuya_version'}⍬
+    lib←''
 
-    create←{ ⍝ did addr key ver → handle
-        did addr key ver lib ⎕NA'I4 tuya_create <0T1 <0T1 <0T1 <0T1'
-        ⍵
-    }⍬
+    ∇ Init path;libpath
+      ⍝ Initialize FFI bindings.
+      ⍝ path  optional library path (default: libseatuya.so)
+      :If 0=⎕NC 'path'
+          path←⎕GETENV 'SEATUYA_LIB'
+      :EndIf
+      :If 0=⍴path ⋄ path←'libseatuya.so' ⋄ :EndIf
+      libpath←path
+      lib←libpath
 
-    destroy←{lib ⎕NA' tuya_destroy I4' ⋄ 'tuya_destroy'⎕NA'void tuya_destroy(void*)'⊣⍵}⍬
+      ⍝ Version
+      ⍝ const char *tuya_version(void)
+      version←⎕NA 'T' (libpath,'|tuya_version')
 
-    connect←{dev host←⍵ ⋄ dev host lib ⎕NA'I4 tuya_connect I4 <0T1'}
+      ⍝ Lifecycle
+      ⍝ tuya_device_t *tuya_create(const char*,const char*,const char*,const char*)
+      Create←⎕NA 'P' (libpath,'|tuya_create') 'T' 'T' 'T' 'T'
+      ⍝ tuya_device_t *tuya_alloc(const char*)
+      Alloc←⎕NA 'P' (libpath,'|tuya_alloc') 'T'
+      ⍝ void tuya_destroy(tuya_device_t*)
+      Destroy←⎕NA '' (libpath,'|tuya_destroy') 'P'
 
-    isConnected←{dev←⍵ ⋄ dev lib ⎕NA'I4 tuya_is_connected I4'}
+      ⍝ Credentials
+      ⍝ void tuya_set_credentials(tuya_device_t*,const char*,const char*)
+      SetCredentials←⎕NA '' (libpath,'|tuya_set_credentials') 'P' 'T' 'T'
+      ⍝ const char *tuya_get_device_id(tuya_device_t*)
+      GetDeviceId←⎕NA 'T' (libpath,'|tuya_get_device_id') 'P'
+      ⍝ const char *tuya_get_local_key(tuya_device_t*)
+      GetLocalKey←⎕NA 'T' (libpath,'|tuya_get_local_key') 'P'
+      ⍝ const char *tuya_get_ip(tuya_device_t*)
+      GetIp←⎕NA 'T' (libpath,'|tuya_get_ip') 'P'
 
-    turnOn←{dev dp←⍵ ⋄ dev dp lib ⎕NA'<0T1 tuya_turn_on I4 I4'}
+      ⍝ Connection
+      ⍝ bool tuya_connect(tuya_device_t*,const char*)
+      Connect←⎕NA 'I' (libpath,'|tuya_connect') 'P' 'T'
+      ⍝ void tuya_disconnect(tuya_device_t*)
+      Disconnect←⎕NA '' (libpath,'|tuya_disconnect') 'P'
+      ⍝ bool tuya_is_connected(tuya_device_t*)
+      IsConnected←⎕NA 'I' (libpath,'|tuya_is_connected') 'P'
+      ⍝ bool tuya_reconnect(tuya_device_t*)
+      Reconnect←⎕NA 'I' (libpath,'|tuya_reconnect') 'P'
 
-    turnOff←{dev dp←⍵ ⋄ dev dp lib ⎕NA'<0T1 tuya_turn_off I4 I4'}
+      ⍝ Retry
+      SetRetryLimit←⎕NA '' (libpath,'|tuya_set_retry_limit') 'P' 'I'
+      SetRetryDelay←⎕NA '' (libpath,'|tuya_set_retry_delay') 'P' 'I'
+      GetRetryLimit←⎕NA 'I' (libpath,'|tuya_get_retry_limit') 'P'
+      GetRetryDelay←⎕NA 'I' (libpath,'|tuya_get_retry_delay') 'P'
 
-    status←{dev←⍵ ⋄ dev lib ⎕NA'<0T1 tuya_status I4'}
+      ⍝ Session
+      NegotiateSession←⎕NA 'I' (libpath,'|tuya_negotiate_session') 'P' 'T'
 
-    heartbeat←{dev←⍵ ⋄ dev lib ⎕NA'<0T1 tuya_heartbeat I4'}
+      ⍝ State
+      GetProtocol←⎕NA 'I' (libpath,'|tuya_get_protocol') 'P'
+      GetSessionState←⎕NA 'I' (libpath,'|tuya_get_session_state') 'P'
+      GetSocketState←⎕NA 'I' (libpath,'|tuya_get_socket_state') 'P'
+      GetLastError←⎕NA 'I' (libpath,'|tuya_get_last_error') 'P'
 
-    setValueBool←{dev dp val←⍵ ⋄ dev dp val lib ⎕NA'<0T1 tuya_set_value_bool I4 I4 I4'}
+      ⍝ Async
+      SetAsyncMode←⎕NA '' (libpath,'|tuya_set_async_mode') 'P' 'I'
 
-    setValueInt←{dev dp val←⍵ ⋄ dev dp val lib ⎕NA'<0T1 tuya_set_value_int I4 I4 I4'}
+      ⍝ High-level round-trip (return malloc'd char* -- auto-converted via 'T')
+      SetValueBool←⎕NA 'T' (libpath,'|tuya_set_value_bool') 'P' 'I' 'I'
+      SetValueInt←⎕NA 'T' (libpath,'|tuya_set_value_int') 'P' 'I' 'I'
+      SetValueString←⎕NA 'T' (libpath,'|tuya_set_value_string') 'P' 'I' 'T'
+      SetValueFloat←⎕NA 'T' (libpath,'|tuya_set_value_float') 'P' 'I' 'F8'
+      TurnOn←⎕NA 'T' (libpath,'|tuya_turn_on') 'P' 'I'
+      TurnOff←⎕NA 'T' (libpath,'|tuya_turn_off') 'P' 'I'
+      Status←⎕NA 'T' (libpath,'|tuya_status') 'P'
+      Heartbeat←⎕NA 'T' (libpath,'|tuya_heartbeat') 'P'
 
-    setValueFloat←{dev dp val←⍵ ⋄ dev dp val lib ⎕NA'<0T1 tuya_set_value_float I4 I4 F8'}
+      ⍝ Memory
+      FreeString←⎕NA '' (libpath,'|tuya_free_string') 'P'
 
-    setDevice22←{dev json←⍵ ⋄ dev json lib ⎕NA' tuya_set_device22 I4 <0T1'}
+      ⍝ device22
+      SetDevice22←⎕NA '' (libpath,'|tuya_set_device22') 'P' 'T'
+      IsDevice22←⎕NA 'I' (libpath,'|tuya_is_device22') 'P'
+    ∇
 
-    freeString←{ptr←⍵ ⋄ ptr lib ⎕NA' tuya_free_string <0T1'}
+    ═══════════════════════════════════════════════════════════
+    ⍝ Type-aware SetValue dispatcher
+    ═══════════════════════════════════════════════════════════
 
-    ⍝ Constants
+    ∇ r←SetValue args;dev;dp;val;tp
+      ⍝ args  3-element nested vector: (dev dp value)
+      ⍝       where dev=device-handle, dp=datapoint, value=value to set
+      (dev dp val)←3↑args
+      tp←10|⎕DR val
+      :Select tp
+      :Case 1  ⍝ boolean (DR 11 → 1)
+          r←SetValueBool dev dp val
+      :Case 3  ⍝ integer (DR 83 → 3)
+          r←SetValueInt dev dp val
+      :Case 5  ⍝ float (DR 645 → 5)
+          r←SetValueFloat dev dp val
+      :Case 2  ⍝ char vector (DR 82 → 2)
+          r←SetValueString dev dp val
+      :Else
+          r←SetValueString dev dp(⍕val)
+      :EndSelect
+    ∇
+
+    ═══════════════════════════════════════════════════════════
+    ⍝ Command constants
+    ═══════════════════════════════════════════════════════════
+
     CMD_CONTROL←7 ⋄ CMD_DP_QUERY←10 ⋄ CMD_HEART_BEAT←9
     CMD_STATUS←8 ⋄ CMD_CONTROL_NEW←13 ⋄ CMD_DP_QUERY_NEW←16
     DEFAULT_PORT←6668 ⋄ BUFSIZE←1024
+    DEFAULT_RETRY_LIMIT←5 ⋄ DEFAULT_RETRY_DELAY_MS←100
 
-    ⍝ Type-dispatched setter
-    setValue←{ ⍝ dev dp value → result
-        dev dp val←⍵
-        :If 0=1↑0⍴val          ⍝ numeric
-            :If val=⌊val ⋄ dev dp val setValueInt
-            :Else ⋄ dev dp val setValueFloat
-            :EndIf
-        :Else ⋄ dev dp val setValueString
-        :EndIf
-    }
+    PROTO_V31←0 ⋄ PROTO_V33←1 ⋄ PROTO_V34←2 ⋄ PROTO_V35←3
+
 :EndNamespace

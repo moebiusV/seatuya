@@ -173,10 +173,9 @@ class Device
     s
 
   fun _ensure_library() =>
-    match @pony_os_getenv[Pointer[U8]]("SEATUYA_LIB".cstring())
-    | let env: Pointer[U8] tag =>
-      @dlopen[Pointer[None]](env, 1)  // RTLD_LAZY
-      None
+    let env_ptr = @pony_os_getenv[Pointer[U8]]("SEATUYA_LIB".cstring())
+    if not env_ptr.is_null() then
+      @dlopen[Pointer[None]](env_ptr, 1)  // RTLD_LAZY
     end
 
 // --- Standalone functions ---

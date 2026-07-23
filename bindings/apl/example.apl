@@ -1,21 +1,48 @@
-⍝ example.apl — demonstrate libseatuya via Dyalog APL
+⍝ example.apl -- Demonstrate libseatuya via Dyalog APL FFI
+⍝
+⍝ Usage:
+⍝   )LOAD seatuya
+⍝   seatuya.RunExample
+⍝
+⍝ Or from command line:
+⍝   dyalogscript example.apl
+⍝
+⍝ Set TUYA_DEVICE_ID, TUYA_LOCAL_KEY, TUYA_IP, TUYA_VERSION env vars.
 
-deviceId←{6::'0123456789abcdef01234567' ⋄ ⊃2⎕NQ'.' 'GetEnvironment' 'TUYA_DEVICE_ID'}⍬
-localKey←{6::'0123456789abcdef' ⋄ ⊃2⎕NQ'.' 'GetEnvironment' 'TUYA_LOCAL_KEY'}⍬
-ip←{6::'192.168.1.100' ⋄ ⊃2⎕NQ'.' 'GetEnvironment' 'TUYA_IP'}⍬
-ver←{6::'3.4' ⋄ ⊃2⎕NQ'.' 'GetEnvironment' 'TUYA_VERSION'}⍬
+⍝ Load the binding
+)COPY seatuya.apl
 
-⎕←'seatuya version: ',⍕seatuya.version
+∇ RunExample;dev_id;local_key;ip;ver;dev;resp
+  dev_id←GetEnvOrDefault 'TUYA_DEVICE_ID' '0123456789abcdef01234567'
+  local_key←GetEnvOrDefault 'TUYA_LOCAL_KEY' '0123456789abcdef'
+  ip←GetEnvOrDefault 'TUYA_IP' '192.168.1.100'
+  ver←GetEnvOrDefault 'TUYA_VERSION' '3.4'
 
-dev←seatuya.create deviceId ip localKey ver
-:If dev=0
-    ⎕←'ERROR: Could not create device handle' ⋄ →0
-:EndIf
+  ⍝ Initialize
+  seatuya.Init''
 
-⎕←'Connected: ',⍕dev seatuya.isConnected
-⎕←'turn_on: ',⍕dev seatuya.turnOn 1
-⎕←'status: ',⍕dev seatuya.status
-⎕←'turn_off: ',⍕dev seatuya.turnOff 1
+  ⎕←'seatuya version: ',⍕seatuya.version
 
-seatuya.destroy dev
-⎕←'Done.'
+  dev←seatuya.Create dev_id ip local_key ver
+  :If dev=0
+      ⎕←'ERROR: Could not create device handle'
+      :Return
+  :EndIf
+
+  ⎕←'Connected: ',(⍕seatuya.IsConnected dev)
+  ⎕←'turn_on: ',seatuya.TurnOn dev 1
+  ⎕←'status: ',seatuya.Status dev
+  ⎕←'turn_off: ',seatuya.TurnOff dev 1
+
+  seatuya.Destroy dev
+  ⎕←'Done.'
+∇
+
+∇ r←GetEnvOrDefault env default;val
+  val←⎕GETENV env
+  :If 0=⍴val ⋄ val←default ⋄ :EndIf
+  r←val
+∇
+
+RunExample
+)OFF

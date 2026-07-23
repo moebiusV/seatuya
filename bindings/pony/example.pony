@@ -29,7 +29,5 @@ actor Main
     end
 
   fun _env_or(key: String, fallback: String): String =>
-    match @pony_os_getenv[Pointer[U8]](key.cstring())
-    | let v: Pointer[U8] tag => String.from_cstring(v)
-    else fallback
-    end
+    let ptr = @pony_os_getenv[Pointer[U8]](key.cstring())
+    if ptr.is_null() then fallback else String.from_cstring(ptr) end
