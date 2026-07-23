@@ -1,7 +1,7 @@
-SUBDIRS = include src tests examples
+SUBDIRS = include src tests examples bindings
 ACLOCAL_AMFLAGS = -I m4
 
-EXTRA_DIST = README COPYING AUTHORS NEWS ChangeLog INSTALL fetch-deps.sh \
+EXTRA_DIST = README.md COPYING AUTHORS NEWS ChangeLog INSTALL fetch-deps.sh \
 	README.distributions \
 	seatuya.lsp \
 	tuya-devices.lsp \

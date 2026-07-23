@@ -147,6 +147,16 @@ AC_TYPE_UINT8_T
 AC_TYPE_UINT32_T
 
 AC_CONFIG_FILES([Makefile
+                 bindings/Makefile
+                 bindings/node/Makefile
+                 bindings/picolisp/Makefile
+                 bindings/ada/Makefile
+                 bindings/csharp/Makefile
+                 bindings/tcl/Makefile
+                 bindings/lua/Makefile
+                 bindings/julia/Makefile
+                 bindings/janet/Makefile
+                 bindings/bqn/Makefile
                  src/Makefile
                  include/Makefile
                  tests/Makefile

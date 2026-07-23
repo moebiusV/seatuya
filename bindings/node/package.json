@@ -1,0 +1,19 @@
+{
+  "name": "seatuya",
+  "version": "0.2.0",
+  "description": "Node.js FFI bindings for libseatuya — local control of Tuya smart devices",
+  "main": "seatuya.js",
+  "license": "BSD-2-Clause",
+  "keywords": ["tuya", "iot", "smart-home", "ffi"],
+  "dependencies": {
+    "ffi-napi": "^4.0.3",
+    "ref-napi": "^3.0.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/davidwalther/seatuya"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
