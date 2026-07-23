@@ -166,6 +166,32 @@ AC_CONFIG_FILES([Makefile
                  bindings/guile/Makefile
                  bindings/racket/Makefile
                  bindings/rust/Makefile
+                 bindings/swift/Makefile
+                 bindings/zig/Makefile
+                 bindings/odin/Makefile
+                 bindings/haskell/Makefile
+                 bindings/ocaml/Makefile
+                 bindings/sml/Makefile
+                 bindings/gauche/Makefile
+                 bindings/chicken/Makefile
+                 bindings/gerbil/Makefile
+                 bindings/clojure/Makefile
+                 bindings/nim/Makefile
+                 bindings/crystal/Makefile
+                 bindings/d/Makefile
+                 bindings/erlang/Makefile
+                 bindings/elixir/Makefile
+                 bindings/fsharp/Makefile
+                 bindings/r/Makefile
+                 bindings/freepascal/Makefile
+                 bindings/carp/Makefile
+                 bindings/shen/Makefile
+                 bindings/pony/Makefile
+                 bindings/prolog/Makefile
+                 bindings/red/Makefile
+                 bindings/forth/Makefile
+                 bindings/apl/Makefile
+                 bindings/objc/Makefile
                  bindings/bqn/Makefile
                  src/Makefile
                  include/Makefile
