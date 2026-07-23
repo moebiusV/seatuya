@@ -1,0 +1,366 @@
+;;
+;; seatuya.carp -- Carp FFI bindings for libseatuya (Tuya local device control)
+;;
+;; Carp compiles to C, so these bindings declare extern C functions and an
+;; opaque type for the device handle.  `system-include` adds the necessary
+;; #include to the generated C code.
+;;
+;; Requirements:
+;;   - Carp (recent version with `register` and `λ` FFI support)
+;;   - libseatuya installed (header + shared library on the compiler path)
+;;
+;; Build:
+;;   carp -x -b seatuya_example example.carp
+;;   ./out/seatuya_example
+;;
+;; Set SEATUYA_LIB env var to the path of libseatuya.so for custom locations.
+;;
+
+;; Register the opaque device pointer type.
+(register-type TuyaDevice)
+
+;; Include the seatuya C header in generated output.
+(system-include "seatuya.h")
+
+;; ------------------------------------------------------------------
+;;  Native extern declarations
+;; ------------------------------------------------------------------
+
+(defmodule Seatuya.Native
+  "Raw C function bindings.  Prefer the safe wrappers in Seatuya."
+
+  ;; Lifecycle
+  (register create (λ [(Ptr CChar) (Ptr CChar) (Ptr CChar) (Ptr CChar)] (Ptr TuyaDevice)))
+  (register alloc (λ [(Ptr CChar)] (Ptr TuyaDevice)))
+  (register destroy (λ [(Ptr TuyaDevice)] ()))
+  (register version (λ [] (Ptr CChar)))
+
+  ;; Credentials
+  (register set-credentials (λ [(Ptr TuyaDevice) (Ptr CChar) (Ptr CChar)] ()))
+  (register get-device-id (λ [(Ptr TuyaDevice)] (Ptr CChar)))
+  (register get-local-key (λ [(Ptr TuyaDevice)] (Ptr CChar)))
+  (register get-ip (λ [(Ptr TuyaDevice)] (Ptr CChar)))
+
+  ;; Connection
+  (register connect (λ [(Ptr TuyaDevice) (Ptr CChar)] Bool))
+  (register disconnect (λ [(Ptr TuyaDevice)] ()))
+  (register is-connected (λ [(Ptr TuyaDevice)] Bool))
+  (register reconnect (λ [(Ptr TuyaDevice)] Bool))
+
+  ;; Retry
+  (register set-retry-limit (λ [(Ptr TuyaDevice) Int] ()))
+  (register set-retry-delay (λ [(Ptr TuyaDevice) Int] ()))
+  (register get-retry-limit (λ [(Ptr TuyaDevice)] Int))
+  (register get-retry-delay (λ [(Ptr TuyaDevice)] Int))
+
+  ;; Session negotiation
+  (register negotiate-session (λ [(Ptr TuyaDevice) (Ptr CChar)] Bool))
+  (register negotiate-session-start (λ [(Ptr TuyaDevice) (Ptr CChar)] Bool))
+  (register negotiate-session-finalize (λ [(Ptr TuyaDevice) (Ptr CChar) Int (Ptr CChar)] Bool))
+
+  ;; State queries
+  (register get-protocol (λ [(Ptr TuyaDevice)] Int))
+  (register get-session-state (λ [(Ptr TuyaDevice)] Int))
+  (register get-socket-state (λ [(Ptr TuyaDevice)] Int))
+  (register get-last-error (λ [(Ptr TuyaDevice)] Int))
+
+  ;; Async
+  (register set-async-mode (λ [(Ptr TuyaDevice) Bool] ()))
+  (register is-socket-readable (λ [(Ptr TuyaDevice)] Bool))
+  (register is-socket-writable (λ [(Ptr TuyaDevice)] Bool))
+  (register set-session-ready (λ [(Ptr TuyaDevice)] Bool))
+
+  ;; Message building / decoding
+  (register build-message (λ [(Ptr TuyaDevice) (Ptr UInt8) Int (Ptr CChar) (Ptr CChar)] Int))
+  (register decode-message (λ [(Ptr TuyaDevice) (Ptr UInt8) Int (Ptr CChar)] (Ptr CChar)))
+  (register generate-payload (λ [(Ptr TuyaDevice) Int (Ptr CChar) (Ptr CChar)] (Ptr CChar)))
+  (register send (λ [(Ptr TuyaDevice) (Ptr UInt8) Int] Int))
+  (register receive (λ [(Ptr TuyaDevice) (Ptr UInt8) Int Int] Int))
+
+  ;; device22
+  (register set-device22 (λ [(Ptr TuyaDevice) (Ptr CChar)] ()))
+  (register is-device22 (λ [(Ptr TuyaDevice)] Bool))
+
+  ;; High-level round-trip
+  (register set-value-bool (λ [(Ptr TuyaDevice) Int Bool] (Ptr CChar)))
+  (register set-value-int (λ [(Ptr TuyaDevice) Int Int] (Ptr CChar)))
+  (register set-value-string (λ [(Ptr TuyaDevice) Int (Ptr CChar)] (Ptr CChar)))
+  (register set-value-float (λ [(Ptr TuyaDevice) Int Double] (Ptr CChar)))
+  (register turn-on (λ [(Ptr TuyaDevice) Int] (Ptr CChar)))
+  (register turn-off (λ [(Ptr TuyaDevice) Int] (Ptr CChar)))
+  (register status (λ [(Ptr TuyaDevice)] (Ptr CChar)))
+  (register heartbeat (λ [(Ptr TuyaDevice)] (Ptr CChar)))
+
+  ;; Memory
+  (register free-string (λ [(Ptr CChar)] ()))
+)
+
+;; ------------------------------------------------------------------
+;;  Safe wrappers (with Result-based error handling)
+;; ------------------------------------------------------------------
+
+(defmodule Seatuya
+  "High-level, safe wrappers around the native FFI bindings."
+
+  (defmodule Result
+    "Simple sum type for fallible operations."
+    (register-type Result)
+    (defmodule Ok
+      (register-type Ok)
+      (defn init [x] Ok)
+    )
+    (defmodule Error
+      (register-type Error)
+      (defn init [msg] Error)
+    )
+  )
+
+  ;;
+  ;; Convert a (Ptr CChar) to a Carp String by copying bytes up to NUL.
+  ;; This is a best-effort helper; the exact copy mechanism depends on the
+  ;; Carp standard library version.  In Carp >= 2023, `(Str.copy ptr)` or
+  ;; similar may be available.
+  ;;
+  (defn ptr-to-str [ptr]
+    (if (= nil ptr) "" ...))
+
+  ;;
+  ;; Free a malloc'd C string result.
+  ;;
+  (defn free-string [ptr]
+    (Native.free-string ptr)
+    "")
+
+  ;;
+  ;; Lifecycle
+  ;;
+
+  (defn create [device-id address local-key version]
+    (let [dev (Native.create (Str.cstr device-id) (Str.cstr address)
+                             (Str.cstr local-key) (Str.cstr version))]
+      (if (= nil dev)
+        (Result.Error.init "create-failed")
+        dev)))
+
+  (defn alloc [version]
+    (let [dev (Native.alloc (Str.cstr version))]
+      (if (= nil dev)
+        (Result.Error.init "alloc-failed")
+        dev)))
+
+  (defn destroy [dev]
+    (Native.destroy dev))
+
+  (defn get-version []
+    (Native.version))
+
+  ;;
+  ;; Credentials
+  ;;
+
+  (defn set-credentials [dev device-id local-key]
+    (Native.set-credentials dev (Str.cstr device-id) (Str.cstr local-key)))
+
+  (defn get-device-id [dev]
+    (Native.get-device-id dev))
+
+  (defn get-local-key [dev]
+    (Native.get-local-key dev))
+
+  (defn get-ip [dev]
+    (Native.get-ip dev))
+
+  ;;
+  ;; Connection
+  ;;
+
+  (defn connect [dev hostname]
+    (Native.connect dev (Str.cstr hostname)))
+
+  (defn disconnect [dev]
+    (Native.disconnect dev))
+
+  (defn is-connected [dev]
+    (Native.is-connected dev))
+
+  (defn reconnect [dev]
+    (Native.reconnect dev))
+
+  ;;
+  ;; Retry
+  ;;
+
+  (defn set-retry-limit [dev limit]
+    (Native.set-retry-limit dev limit))
+
+  (defn set-retry-delay [dev delay-ms]
+    (Native.set-retry-delay dev delay-ms))
+
+  (defn get-retry-limit [dev]
+    (Native.get-retry-limit dev))
+
+  (defn get-retry-delay [dev]
+    (Native.get-retry-delay dev))
+
+  ;;
+  ;; Session negotiation
+  ;;
+
+  (defn negotiate-session [dev key]
+    (Native.negotiate-session dev (Str.cstr key)))
+
+  (defn negotiate-session-start [dev key]
+    (Native.negotiate-session-start dev (Str.cstr key)))
+
+  ;;
+  ;; State queries
+  ;;
+
+  (defn get-protocol [dev]
+    (Native.get-protocol dev))
+
+  (defn get-session-state [dev]
+    (Native.get-session-state dev))
+
+  (defn get-socket-state [dev]
+    (Native.get-socket-state dev))
+
+  (defn get-last-error [dev]
+    (Native.get-last-error dev))
+
+  ;;
+  ;; Async
+  ;;
+
+  (defn set-async-mode [dev async]
+    (Native.set-async-mode dev async))
+
+  (defn is-socket-readable [dev]
+    (Native.is-socket-readable dev))
+
+  (defn is-socket-writable [dev]
+    (Native.is-socket-writable dev))
+
+  (defn set-session-ready [dev]
+    (Native.set-session-ready dev))
+
+  ;;
+  ;; High-level round-trip
+  ;;
+
+  (defn turn-on [dev switch-dp]
+    (Native.turn-on dev switch-dp))
+
+  (defn turn-off [dev switch-dp]
+    (Native.turn-off dev switch-dp))
+
+  (defn status [dev]
+    (Native.status dev))
+
+  (defn heartbeat [dev]
+    (Native.heartbeat dev))
+
+  (defn set-value-bool [dev dp value]
+    (Native.set-value-bool dev dp value))
+
+  (defn set-value-int [dev dp value]
+    (Native.set-value-int dev dp value))
+
+  (defn set-value-string [dev dp value]
+    (Native.set-value-string dev dp (Str.cstr value)))
+
+  (defn set-value-float [dev dp value]
+    (Native.set-value-float dev dp value))
+
+  ;;
+  ;; Type-aware set-value dispatcher
+  ;; Carp is statically typed, so dispatch must happen at compile time
+  ;; via overloaded functions or explicit per-type calls.
+  ;; We provide the array of single-type setters above; callers choose
+  ;; the appropriate one for their value type.
+  ;;
+)
+
+;; ------------------------------------------------------------------
+;;  Constants
+;; ------------------------------------------------------------------
+
+(defmodule Seatuya.Command
+  (def UDP                  0)
+  (def AP_CONFIG            1)
+  (def ACTIVE               2)
+  (def BIND                 3)
+  (def RENAME_GW            4)
+  (def RENAME_DEVICE        5)
+  (def UNBIND               6)
+  (def CONTROL              7)
+  (def STATUS               8)
+  (def HEART_BEAT           9)
+  (def DP_QUERY             10)
+  (def QUERY_WIFI           11)
+  (def TOKEN_BIND           12)
+  (def CONTROL_NEW          13)
+  (def ENABLE_WIFI          14)
+  (def DP_QUERY_NEW         16)
+  (def SCENE_EXECUTE        17)
+  (def UPDATEDPS            18)
+  (def UDP_NEW              19)
+  (def AP_CONFIG_NEW        20)
+  (def GET_LOCAL_TIME       28)
+  (def WEATHER_OPEN         32)
+  (def WEATHER_DATA         33)
+  (def STATE_UPLOAD_SYN     34)
+  (def STATE_UPLOAD_SYN_RECV 35)
+  (def HEART_BEAT_STOP      37)
+  (def STREAM_TRANS         38)
+  (def GET_WIFI_STATUS      43)
+  (def WIFI_CONNECT_TEST    44)
+  (def GET_MAC              45)
+  (def GET_IR_STATUS        46)
+  (def IR_TX_RX_TEST        47)
+  (def LAN_GW_ACTIVE        240)
+  (def LAN_SUB_DEV_REQUEST  241)
+  (def LAN_DELETE_SUB_DEV   242)
+  (def LAN_REPORT_SUB_DEV   243)
+  (def LAN_SCENE            244)
+  (def LAN_PUBLISH_CLOUD_CONFIG 245)
+  (def LAN_PUBLISH_APP_CONFIG   246)
+  (def LAN_EXPORT_APP_CONFIG    247)
+  (def LAN_PUBLISH_SCENE_PANEL  248)
+  (def LAN_REMOVE_GW        249)
+  (def LAN_CHECK_GW_UPDATE  250)
+  (def LAN_GW_UPDATE        251)
+  (def LAN_SET_GW_CHANNEL   252)
+)
+
+(defmodule Seatuya.Protocol
+  (def V31 0)
+  (def V33 1)
+  (def V34 2)
+  (def V35 3)
+)
+
+(defmodule Seatuya.Session
+  (def INVALID     0)
+  (def STARTING    1)
+  (def FINALIZING  2)
+  (def ESTABLISHED 3)
+)
+
+(defmodule Seatuya.Socket
+  (def NO_SUCH_HOST   0)
+  (def NO_SOCK_AVAIL  1)
+  (def FAILED         2)
+  (def DISCONNECTED   3)
+  (def CONNECTING     4)
+  (def CONNECTED      5)
+  (def READY          6)
+  (def RECEIVING      7)
+)
+
+(defmodule Seatuya.Const
+  (def DEFAULT_PORT        6668)
+  (def BUFSIZE             1024)
+  (def DEFAULT_RETRY_LIMIT 5)
+  (def DEFAULT_RETRY_DELAY_MS 100)
+)

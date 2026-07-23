@@ -1,0 +1,1 @@
+Gerbil Scheme bindings for libseatuya. Uses Gambit's `c-lambda` FFI with runtime `dlopen` via `SEATUYA_LIB` env var support. Compile the module with `gxc seatuya.ss && gxi -e '(load "example")'`, or set `SEATUYA_LIB=/path/to/libseatuya.so` for a custom library path.

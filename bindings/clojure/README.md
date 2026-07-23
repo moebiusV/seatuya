@@ -1,0 +1,1 @@
+Clojure JNA bindings for libseatuya. Requires JNA (`com.sun.jna`) on the classpath. Loads the library at runtime via `Native.load`; set `SEATUYA_LIB` to override the path. Run with `java -cp jna.jar:seatuya.jar clojure.main -i example.clj` or via Leiningen with `[net.java.dev.jna/jna "5.14.0"]` on the classpath.

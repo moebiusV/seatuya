@@ -1,0 +1,1 @@
+Crystal bindings for libseatuya. Requires libseatuya.so installed and linkable at compile time; set `SEATUYA_LIB` to override the search path via `LD_LIBRARY_PATH` or the built-in runtime `dlopen` fallback. Compile with `crystal build --link-flags "-lseatuya" example.cr`, or `crystal run example.cr --link-flags "-lseatuya"`.

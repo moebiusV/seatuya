@@ -1,0 +1,1 @@
+F# P/Invoke bindings for libseatuya. Requires .NET 5+ (or Mono 6.12+) and `libseatuya.so` on the library search path (or set `SEATUYA_LIB` to the full path, and/or `LD_LIBRARY_PATH` for legacy Mono). Compile: `dotnet build Seatuya.fs`. Usage: `Seatuya.Seatuya.create "dev_id" "ip" "local_key" "3.3"` returns `Some Device` on success.

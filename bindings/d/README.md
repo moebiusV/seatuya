@@ -1,0 +1,1 @@
+D bindings for libseatuya. Loads the library at runtime via `dlopen`; set `SEATUYA_LIB` to override the path. Compile with `dmd -ofexample example.d seatuya.d && ./example` -- no link flags needed since symbol resolution is deferred to runtime.

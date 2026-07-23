@@ -1,0 +1,1 @@
+Chicken Scheme bindings for libseatuya. Requires libseatuya.so installed on the library path, or the `SEATUYA_LIB` environment variable pointing to the shared library. Compile the module with `csc -s seatuya.scm -L -lseatuya` and then `csi -s example.scm` to run the example, or set `SEATUYA_LIB=/path/to/libseatuya.so csi -s example.scm` for runtime loading.

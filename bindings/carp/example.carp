@@ -1,0 +1,39 @@
+;;
+;; example.carp -- Carp example using libseatuya bindings.
+;;
+;; Build + run:
+;;   carp -x -b seatuya_example example.carp
+;;   ./out/seatuya_example
+;;
+;; Environment variables: DEVICE_ID, DEVICE_IP, LOCAL_KEY, VERSION
+;;
+
+(load "seatuya.carp")
+
+(defmodule Main
+  (defn main []
+    (let [dev-id  (Environment.get-str "DEVICE_ID" "0123456789abcdef0123")
+          addr    (Environment.get-str "DEVICE_IP" "192.168.1.100")
+          key     (Environment.get-str "LOCAL_KEY" "0123456789abcdef")
+          ver     (Environment.get-str "VERSION"   "3.3")
+          dev     (Seatuya.create dev-id addr key ver)]
+
+      (println "seatuya version:" &(Seatuya.get-version))
+
+      (if (not (nil? dev))
+        (do
+          (println "Device created")
+
+          ;; Turn on DP 1
+          (println "Turn ON response:" &(Seatuya.turn-on dev 1))
+
+          ;; Query status
+          (println "Device status:" &(Seatuya.status dev))
+
+          ;; Turn off DP 1
+          (println "Turn OFF response:" &(Seatuya.turn-off dev 1))
+
+          (Seatuya.destroy dev)
+          (println "Device destroyed"))
+        (println "Create failed"))))
+)

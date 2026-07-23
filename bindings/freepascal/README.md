@@ -1,0 +1,1 @@
+FreePascal bindings for libseatuya. Requires the FreePascal compiler (3.2+) and `libseatuya.so` on the library search path (or set `SEATUYA_LIB` to the full path and run `InitSeatuya` before any other call). Compile: `fpc -oseatuya_example example.pas`. Usage: `tuya_create(PChar('dev_id'), PChar('ip'), PChar('key'), PChar('3.3'))` returns a `PTuyaDevice` pointer.

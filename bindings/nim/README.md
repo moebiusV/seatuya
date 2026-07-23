@@ -1,0 +1,1 @@
+Nim bindings for libseatuya. Loads the library at runtime via `dynlib`; set `SEATUYA_LIB` to override the path. Run with `nim c -r example.nim` -- no link flags required since symbol resolution is deferred to runtime via `dlsym`.
