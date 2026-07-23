@@ -226,8 +226,8 @@ class Seatuya {
   }
 
   // Message building and decoding
-  public static function buildMessage(dev:RawPointer<Void>, cmd:Int, payload:String, key:String):String {
-    return cast _buildMsg(dev, null, cmd, payload, key);
+  public static function buildMessage(dev:RawPointer<Void>, buf:RawPointer<Void>, cmd:Int, payload:String, key:String):Int {
+    return cast _buildMsg(dev, buf, cmd, payload, key);
   }
 
   public static function decodeMessage(dev:RawPointer<Void>, buf:RawPointer<Void>, size:Int, key:String):String {
@@ -299,16 +299,76 @@ class Seatuya {
 
   // ---- Constants --------------------------------------------------------
 
+  // Command types (43 values)
+  public static inline var CMD_UDP:Int = 0;
+  public static inline var CMD_AP_CONFIG:Int = 1;
+  public static inline var CMD_ACTIVE:Int = 2;
+  public static inline var CMD_BIND:Int = 3;
+  public static inline var CMD_RENAME_GW:Int = 4;
+  public static inline var CMD_RENAME_DEVICE:Int = 5;
+  public static inline var CMD_UNBIND:Int = 6;
   public static inline var CMD_CONTROL:Int = 7;
-  public static inline var CMD_DP_QUERY:Int = 10;
-  public static inline var CMD_HEART_BEAT:Int = 9;
   public static inline var CMD_STATUS:Int = 8;
+  public static inline var CMD_HEART_BEAT:Int = 9;
+  public static inline var CMD_DP_QUERY:Int = 10;
+  public static inline var CMD_QUERY_WIFI:Int = 11;
+  public static inline var CMD_TOKEN_BIND:Int = 12;
   public static inline var CMD_CONTROL_NEW:Int = 13;
+  public static inline var CMD_ENABLE_WIFI:Int = 14;
   public static inline var CMD_DP_QUERY_NEW:Int = 16;
+  public static inline var CMD_SCENE_EXECUTE:Int = 17;
+  public static inline var CMD_UPDATEDPS:Int = 18;
+  public static inline var CMD_UDP_NEW:Int = 19;
+  public static inline var CMD_AP_CONFIG_NEW:Int = 20;
+  public static inline var CMD_GET_LOCAL_TIME:Int = 28;
+  public static inline var CMD_WEATHER_OPEN:Int = 32;
+  public static inline var CMD_WEATHER_DATA:Int = 33;
+  public static inline var CMD_STATE_UPLOAD_SYN:Int = 34;
+  public static inline var CMD_STATE_UPLOAD_SYN_RECV:Int = 35;
+  public static inline var CMD_HEART_BEAT_STOP:Int = 37;
+  public static inline var CMD_STREAM_TRANS:Int = 38;
+  public static inline var CMD_GET_WIFI_STATUS:Int = 43;
+  public static inline var CMD_WIFI_CONNECT_TEST:Int = 44;
+  public static inline var CMD_GET_MAC:Int = 45;
+  public static inline var CMD_GET_IR_STATUS:Int = 46;
+  public static inline var CMD_IR_TX_RX_TEST:Int = 47;
+  public static inline var CMD_LAN_GW_ACTIVE:Int = 240;
+  public static inline var CMD_LAN_SUB_DEV_REQUEST:Int = 241;
+  public static inline var CMD_LAN_DELETE_SUB_DEV:Int = 242;
+  public static inline var CMD_LAN_REPORT_SUB_DEV:Int = 243;
+  public static inline var CMD_LAN_SCENE:Int = 244;
+  public static inline var CMD_LAN_PUBLISH_CLOUD_CONFIG:Int = 245;
+  public static inline var CMD_LAN_PUBLISH_APP_CONFIG:Int = 246;
+  public static inline var CMD_LAN_EXPORT_APP_CONFIG:Int = 247;
+  public static inline var CMD_LAN_PUBLISH_SCENE_PANEL:Int = 248;
+  public static inline var CMD_LAN_REMOVE_GW:Int = 249;
+  public static inline var CMD_LAN_CHECK_GW_UPDATE:Int = 250;
+  public static inline var CMD_LAN_GW_UPDATE:Int = 251;
+  public static inline var CMD_LAN_SET_GW_CHANNEL:Int = 252;
+
+  // Protocol versions
   public static inline var PROTO_V31:Int = 0;
   public static inline var PROTO_V33:Int = 1;
   public static inline var PROTO_V34:Int = 2;
   public static inline var PROTO_V35:Int = 3;
+
+  // Session states
+  public static inline var SESSION_INVALID:Int = 0;
+  public static inline var SESSION_STARTING:Int = 1;
+  public static inline var SESSION_FINALIZING:Int = 2;
+  public static inline var SESSION_ESTABLISHED:Int = 3;
+
+  // Socket states
+  public static inline var SOCK_NO_SUCH_HOST:Int = 0;
+  public static inline var SOCK_NO_SOCK_AVAIL:Int = 1;
+  public static inline var SOCK_FAILED:Int = 2;
+  public static inline var SOCK_DISCONNECTED:Int = 3;
+  public static inline var SOCK_CONNECTING:Int = 4;
+  public static inline var SOCK_CONNECTED:Int = 5;
+  public static inline var SOCK_READY:Int = 6;
+  public static inline var SOCK_RECEIVING:Int = 7;
+
+  // Misc
   public static inline var DEFAULT_PORT:Int = 6668;
   public static inline var BUFSIZE:Int = 1024;
   public static inline var DEFAULT_RETRY_LIMIT:Int = 5;
