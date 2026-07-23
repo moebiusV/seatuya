@@ -9,16 +9,16 @@ NB.   TUYA_VERSION    (default: 3.4)
 
 load 'seatuya'
 
-device_id=: 'TUYA_DEVICE_ID' 2!:5 ]
+device_id=: 2!:5 'TUYA_DEVICE_ID'
 if. _1 -: device_id do. device_id=: '0123456789abcdef01234567' end.
 
-local_key=: 'TUYA_LOCAL_KEY' 2!:5 ]
+local_key=: 2!:5 'TUYA_LOCAL_KEY'
 if. _1 -: local_key do. local_key=: '0123456789abcdef' end.
 
-ip=: 'TUYA_IP' 2!:5 ]
+ip=: 2!:5 'TUYA_IP'
 if. _1 -: ip do. ip=: '192.168.1.100' end.
 
-ver=: 'TUYA_VERSION' 2!:5 ]
+ver=: 2!:5 'TUYA_VERSION'
 if. _1 -: ver do. ver=: '3.4' end.
 
 smoutput 'seatuya version: ', tuya_version ''
@@ -37,4 +37,4 @@ smoutput 'turn_off: ', tuya_turn_off dev;1
 
 tuya_destroy dev
 smoutput 'Done.'
-exit 0
+2!:55 (0)

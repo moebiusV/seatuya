@@ -216,17 +216,19 @@ FUNCTION: int tuya_is_device22 ( void* dev )
 
 ! Type-aware set-value dispatch
 :: tuya-set-value ( dev dp val -- str/f )
-    dev dp val
-    val t [ number? ] [ real? ] bi or [
-        val floor val = [ tuya_set_value_int ] [ tuya_set_value_float ] if
+    val t eq? val f eq? or [
+        dev dp val [ 1 ] [ 0 ] if tuya_set_value_bool
     ] [
-        val t eq? val f eq? or
-        [ 1 0 ? tuya_set_value_bool ]
-        [ val >string tuya_set_value_string ] if
+        val number? [
+            val floor val = [
+                dev dp val tuya_set_value_int
+            ] [
+                dev dp val tuya_set_value_float
+            ] if
+        ] [
+            dev dp val >string tuya_set_value_string
+        ] if
     ] if consume-cstr ;
-
-! The two-argument ? 1 0 ? helper for the dispatch above
-: ? ( ? true false -- ?/false/true ) spin [ drop ] [ nip ] if ;
 
 ! Convenience
 : tuya-turn-on ( dev switch-dp -- str/f )

@@ -45,7 +45,7 @@ fn C.tuya_get_retry_delay(dev voidptr) int
 
 fn C.tuya_negotiate_session(dev voidptr, local_key &char) bool
 fn C.tuya_negotiate_session_start(dev voidptr, local_key &char) bool
-fn C.tuya_negotiate_session_finalize(dev voidptr, buf voidptr, size int, local_key &char) bool
+fn C.tuya_negotiate_session_finalize(dev voidptr, buf &byte, size int, local_key &char) bool
 
 fn C.tuya_get_protocol(dev voidptr) int
 fn C.tuya_get_session_state(dev voidptr) int
@@ -57,12 +57,12 @@ fn C.tuya_is_socket_readable(dev voidptr) bool
 fn C.tuya_is_socket_writable(dev voidptr) bool
 fn C.tuya_set_session_ready(dev voidptr) bool
 
-fn C.tuya_build_message(dev voidptr, buf voidptr, cmd int, payload &char, key &char) int
-fn C.tuya_decode_message(dev voidptr, buf voidptr, size int, key &char) &char
+fn C.tuya_build_message(dev voidptr, buf &byte, cmd int, payload &char, key &char) int
+fn C.tuya_decode_message(dev voidptr, buf &byte, size int, key &char) &char
 fn C.tuya_generate_payload(dev voidptr, cmd int, device_id &char, datapoints &char) &char
 
-fn C.tuya_send(dev voidptr, buf voidptr, size int) int
-fn C.tuya_receive(dev voidptr, buf voidptr, maxsize int, minsize int) int
+fn C.tuya_send(dev voidptr, buf &byte, size int) int
+fn C.tuya_receive(dev voidptr, buf &byte, maxsize int, minsize int) int
 
 fn C.tuya_set_value_bool(dev voidptr, dp int, value bool) &char
 fn C.tuya_set_value_int(dev voidptr, dp int, value int) &char

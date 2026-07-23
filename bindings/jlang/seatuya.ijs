@@ -22,9 +22,6 @@ if. _1 ~: env do.
 end.
 cdbind_j_ libpath
 
-NB. cd_j_ alias for readability
-cd=: cd_j_
-
 NB. ===================================================================
 NB. Internal helpers
 NB. ===================================================================

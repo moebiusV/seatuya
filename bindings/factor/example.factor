@@ -12,7 +12,7 @@ USING: seatuya io io.encodings.utf8 kernel math.parser
 IN: example
 
 : getenv-default ( key default -- value )
-    os-env dup [ drop ] [ nip ] if ;
+    os-env dup [ nip ] [ drop ] if ;
 
 "TUYA_DEVICE_ID" "0123456789abcdef01234567" getenv-default :> device-id
 "TUYA_LOCAL_KEY" "0123456789abcdef"         getenv-default :> local-key
