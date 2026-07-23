@@ -1,0 +1,16 @@
+[package]
+name = "seatuya"
+version = "0.2.0"
+edition = "2021"
+description = "Rust FFI bindings for libseatuya — local control of Tuya smart devices"
+license = "BSD-2-Clause"
+
+[dependencies]
+
+[lib]
+name = "seatuya"
+crate-type = ["lib"]
+
+[[example]]
+name = "example"
+path = "examples/example.rs"

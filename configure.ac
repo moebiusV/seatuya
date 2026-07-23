@@ -156,6 +156,16 @@ AC_CONFIG_FILES([Makefile
                  bindings/lua/Makefile
                  bindings/julia/Makefile
                  bindings/janet/Makefile
+                 bindings/perl/Makefile
+                 bindings/python/Makefile
+                 bindings/go/Makefile
+                 bindings/ruby/Makefile
+                 bindings/dart/Makefile
+                 bindings/kotlin/Makefile
+                 bindings/commonlisp/Makefile
+                 bindings/guile/Makefile
+                 bindings/racket/Makefile
+                 bindings/rust/Makefile
                  bindings/bqn/Makefile
                  src/Makefile
                  include/Makefile
