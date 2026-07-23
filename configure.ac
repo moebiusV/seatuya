@@ -212,6 +212,7 @@ AC_CONFIG_FILES([Makefile
                  bindings/eiffel/Makefile\
                  bindings/mercury/Makefile\
                  bindings/euphoria/Makefile
+                 bindings/php/Makefile
                  bindings/bqn/Makefile
                  src/Makefile
                  include/Makefile
