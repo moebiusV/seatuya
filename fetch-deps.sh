@@ -16,6 +16,19 @@ fetch_tuyapp() {
     fi
 }
 
+fetch_libyaml() {
+    if pkg-config --exists yaml-0.1 2>/dev/null; then
+        echo "libyaml: found system installation, skipping."
+        return
+    fi
+    if [ -f "$DEPS_DIR/libyaml/src/yaml.h" ]; then
+        echo "libyaml: already present."
+    else
+        echo "libyaml: not installed system-wide, cloning from GitHub..."
+        git clone --depth 1 https://github.com/yaml/libyaml.git "$DEPS_DIR/libyaml"
+    fi
+}
+
 fetch_jsoncpp() {
     if pkg-config --exists jsoncpp 2>/dev/null; then
         echo "jsoncpp: found system installation, skipping."
@@ -31,5 +44,6 @@ fetch_jsoncpp() {
 
 fetch_tuyapp
 fetch_jsoncpp
+fetch_libyaml
 
 echo "Done. Run ./configure to continue."
