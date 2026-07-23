@@ -52,7 +52,7 @@ fn C.tuya_get_session_state(dev voidptr) int
 fn C.tuya_get_socket_state(dev voidptr) int
 fn C.tuya_get_last_error(dev voidptr) int
 
-fn C.tuya_set_async_mode(dev voidptr, async bool)
+fn C.tuya_set_async_mode(dev voidptr, mode bool)
 fn C.tuya_is_socket_readable(dev voidptr) bool
 fn C.tuya_is_socket_writable(dev voidptr) bool
 fn C.tuya_set_session_ready(dev voidptr) bool
@@ -223,8 +223,8 @@ pub fn get_last_error(dev Device) int {
 
 // -- Async mode --
 
-pub fn set_async_mode(dev Device, async bool) {
-	C.tuya_set_async_mode(dev, async)
+pub fn set_async_mode(dev Device, mode bool) {
+	C.tuya_set_async_mode(dev, mode)
 }
 
 pub fn is_socket_readable(dev Device) bool {
