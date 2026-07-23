@@ -1,5 +1,46 @@
 # seatuya changes — ISV-300W local control investigation
 
+## 2026-07-23: 66 language bindings + 20 device classes + cloud control
+
+### FFI Bindings
+Added 66 language bindings in `bindings/`, each with a complete FFI wrapper
+for the full libseatuya C API (~45 functions, 43 command constants):
+
+Python · JavaScript/Node.js · Go · Rust · Kotlin · Swift · Ruby · C# ·
+Scala · Perl · R · Julia · Dart · Lua · Elixir · Clojure · F# · Haskell ·
+OCaml · Zig · Nim · Crystal · Ada/SPARK · D · Common Lisp (SBCL+ECL) ·
+Erlang · Tcl · Fortran · Racket · Guile · Vala · Haxe · Odin · V ·
+Gleam · FreePascal · Idris 2 · Janet · Fennel · Prolog/SWI · Forth ·
+Factor · Pony · APL · J · BQN · Red · Mercury · Eiffel · SML/MLton ·
+Terra · Hy · Wren · Emacs Lisp · COBOL · Algol 68 · Carp · Shen ·
+Squeak · Chicken Scheme · Gauche Scheme · Gerbil Scheme · Euphoria ·
+PicoLisp · Objective-C · PHP
+
+Skipped: MATLAB (proprietary, no test environment).
+
+### Device Classes
+Expanded tuya-devices.lsp to 20 device classes matching tinytuya:
+- Added: BlanketDevice, FloorFanDevice, RFRemoteControlDevice,
+  WiFiDualMeterDevice, TowelRailHeaterDevice, AtorchTemperatureControllerDevice,
+  ColorfulX7Device, SoriaInverterDevice
+- BulbDevice: added Type C (simple white) and auto-detect-type()
+- CoverDevice: added auto-detect-type() for 8 command type variants
+- PresenceDetectorDevice: added getter methods
+- TuyaDevice: added detect-dps() for DP discovery
+
+### Cloud Control
+TuyaDevice constructor now accepts :cloud-region/:cloud-id/:cloud-secret
+opts for transparent routing through Tuya Cloud REST API when remote
+access is needed.  No separate CloudDevice class required.
+
+### Upstream Fix
+Submitted fix for HEARTBEAT payload offsets in tuyapp GeneratePayload()
+(https://github.com/gordonb3/tuyapp, PR #15).  22-character device IDs
+were silently dropped due to off-by-one replace() offsets in the heartbeat
+template.
+
+# seatuya changes — ISV-300W local control investigation
+
 ## Bug fix (affects the device directly)
 
 **Malformed HEARTBEAT payload for 22-character device ids.**
