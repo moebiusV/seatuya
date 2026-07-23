@@ -1,0 +1,166 @@
+COMMENT
+  seatuya.a68 — Algol 68 FFI bindings for libseatuya
+
+  GCC 16 (released March 2026) includes the "ga68" Algol 68 frontend
+  by Jose E. Marchesi (Oracle).  Since it uses GCC's code-generation
+  infrastructure, C functions can be called through the GCC extern
+  mechanism — declare a C prototype with a PRAGMA or MODULE
+  declaration, and the linker resolves it normally.
+
+  The exact FFI syntax for ga68 is still being documented.  This
+  binding uses the POSIX prelude (GNU68 extension) for C interop
+  and assumes the ga68 compiler accepts PRAGMA EXTERN for C linkage.
+
+  Build (GCC 16+):
+    ga68 -lseatuya seatuya.a68 example.a68 -o example
+
+  Usage:
+    DEV dev := seatuya create(device id, ip, local key, "3.4");
+    print(seatuya turn on(dev, 1));
+    seatuya destroy(dev)
+COMMENT
+
+PRAGMA EXTERN "C" "tuya_version" = PROC STRING: "tuya_version"
+PRAGMA EXTERN "C" "tuya_create" = PROC (STRING,STRING,STRING,STRING) VOID:
+  "tuya_create"
+PRAGMA EXTERN "C" "tuya_alloc" = PROC (STRING) VOID: "tuya_alloc"
+PRAGMA EXTERN "C" "tuya_destroy" = PROC (VOID) VOID: "tuya_destroy"
+PRAGMA EXTERN "C" "tuya_connect" = PROC (VOID,STRING) INT: "tuya_connect"
+PRAGMA EXTERN "C" "tuya_disconnect" = PROC (VOID) VOID: "tuya_disconnect"
+PRAGMA EXTERN "C" "tuya_is_connected" = PROC (VOID) INT: "tuya_is_connected"
+PRAGMA EXTERN "C" "tuya_reconnect" = PROC (VOID) INT: "tuya_reconnect"
+PRAGMA EXTERN "C" "tuya_set_credentials" = PROC (VOID,STRING,STRING) VOID:
+  "tuya_set_credentials"
+PRAGMA EXTERN "C" "tuya_get_device_id" = PROC (VOID) STRING:
+  "tuya_get_device_id"
+PRAGMA EXTERN "C" "tuya_get_local_key" = PROC (VOID) STRING:
+  "tuya_get_local_key"
+PRAGMA EXTERN "C" "tuya_get_ip" = PROC (VOID) STRING: "tuya_get_ip"
+PRAGMA EXTERN "C" "tuya_negotiate_session" = PROC (VOID,STRING) INT:
+  "tuya_negotiate_session"
+PRAGMA EXTERN "C" "tuya_get_protocol" = PROC (VOID) INT: "tuya_get_protocol"
+PRAGMA EXTERN "C" "tuya_get_last_error" = PROC (VOID) INT: "tuya_get_last_error"
+PRAGMA EXTERN "C" "tuya_set_async_mode" = PROC (VOID,INT) VOID:
+  "tuya_set_async_mode"
+PRAGMA EXTERN "C" "tuya_set_value_bool" = PROC (VOID,INT,INT) STRING:
+  "tuya_set_value_bool"
+PRAGMA EXTERN "C" "tuya_set_value_int" = PROC (VOID,INT,INT) STRING:
+  "tuya_set_value_int"
+PRAGMA EXTERN "C" "tuya_set_value_string" = PROC (VOID,INT,STRING) STRING:
+  "tuya_set_value_string"
+PRAGMA EXTERN "C" "tuya_set_value_float" = PROC (VOID,INT,LONG REAL) STRING:
+  "tuya_set_value_float"
+PRAGMA EXTERN "C" "tuya_turn_on" = PROC (VOID,INT) STRING: "tuya_turn_on"
+PRAGMA EXTERN "C" "tuya_turn_off" = PROC (VOID,INT) STRING: "tuya_turn_off"
+PRAGMA EXTERN "C" "tuya_status" = PROC (VOID) STRING: "tuya_status"
+PRAGMA EXTERN "C" "tuya_heartbeat" = PROC (VOID) STRING: "tuya_heartbeat"
+PRAGMA EXTERN "C" "tuya_free_string" = PROC (STRING) VOID: "tuya_free_string"
+PRAGMA EXTERN "C" "tuya_set_device22" = PROC (VOID,STRING) VOID:
+  "tuya_set_device22"
+PRAGMA EXTERN "C" "tuya_is_device22" = PROC (VOID) INT: "tuya_is_device22"
+
+PRAGMA EXTERN "C" "getenv" = PROC (STRING) STRING: "getenv"
+
+COMMENT Constants COMMENT
+INT cmd control = 7, cmd dp query = 10, cmd heart beat = 9,
+    cmd status = 8, cmd control new = 13, cmd dp query new = 16;
+INT proto v31 = 0, proto v33 = 1, proto v34 = 2, proto v35 = 3;
+INT default port = 6668, buf size = 1024;
+
+COMMENT
+  Convenience wrappers.
+  'DEV' is a REF VOID (C's tuya_device_t*).  Algol 68 uses
+  VOID for the opaque pointer, treated as a black box.
+COMMENT
+
+MODE DEV = REF VOID;
+
+PROC seatuya version = STRING:
+  tuya version;
+
+PROC seatuya create = (STRING did, addr, key, ver) DEV:
+  tuya create(did, addr, key, ver);
+
+PROC seatuya destroy = (DEV dev) VOID:
+  tuya destroy(dev);
+
+PROC seatuya connect = (DEV dev, STRING host) BOOL:
+  tuya connect(dev, host) /= 0;
+
+PROC seatuya disconnect = (DEV dev) VOID:
+  tuya disconnect(dev);
+
+PROC seatuya is connected = (DEV dev) BOOL:
+  tuya is connected(dev) /= 0;
+
+PROC seatuya reconnect = (DEV dev) BOOL:
+  tuya reconnect(dev) /= 0;
+
+PROC seatuya set credentials = (DEV dev, STRING did, key) VOID:
+  tuya set credentials(dev, did, key);
+
+PROC seatuya get device id = (DEV dev) STRING:
+  tuya get device id(dev);
+
+PROC seatuya get local key = (DEV dev) STRING:
+  tuya get local key(dev);
+
+PROC seatuya get ip = (DEV dev) STRING:
+  tuya get ip(dev);
+
+PROC seatuya negotiate session = (DEV dev, STRING key) BOOL:
+  tuya negotiate session(dev, key) /= 0;
+
+PROC seatuya get protocol = (DEV dev) INT:
+  tuya get protocol(dev);
+
+PROC seatuya get last error = (DEV dev) INT:
+  tuya get last error(dev);
+
+PROC seatuya set async mode = (DEV dev, BOOL flag) VOID:
+  tuya set async mode(dev, IF flag THEN 1 ELSE 0 FI);
+
+PROC seatuya set value bool = (DEV dev, INT dp, BOOL val) STRING:
+  tuya set value bool(dev, dp, IF val THEN 1 ELSE 0 FI);
+
+PROC seatuya set value int = (DEV dev, INT dp, val) STRING:
+  tuya set value int(dev, dp, val);
+
+PROC seatuya set value float = (DEV dev, INT dp, LONG REAL val) STRING:
+  tuya set value float(dev, dp, val);
+
+PROC seatuya set value string = (DEV dev, INT dp, STRING val) STRING:
+  tuya set value string(dev, dp, val);
+
+PROC seatuya turn on = (DEV dev, INT dp) STRING:
+  tuya turn on(dev, dp);
+
+PROC seatuya turn off = (DEV dev, INT dp) STRING:
+  tuya turn off(dev, dp);
+
+PROC seatuya status = (DEV dev) STRING:
+  tuya status(dev);
+
+PROC seatuya heartbeat = (DEV dev) STRING:
+  tuya heartbeat(dev);
+
+PROC seatuya set device22 = (DEV dev, STRING json) VOID:
+  tuya set device22(dev, json);
+
+PROC seatuya is device22 = (DEV dev) BOOL:
+  tuya is device22(dev) /= 0;
+
+COMMENT
+  Type-aware dispatcher: UNION for the four value types, then
+  a CASE clause dispatches to the correct typed C function.
+COMMENT
+
+MODE VALUETYPE = UNION(BOOL, INT, LONG REAL, STRING);
+
+PROC seatuya set value = (DEV dev, INT dp, VALUETYPE val) STRING:
+  CASE val IN
+    (BOOL b): tuya set value bool(dev, dp, IF b THEN 1 ELSE 0 FI),
+    (INT i):  tuya set value int(dev, dp, i),
+    (LONG REAL r): tuya set value float(dev, dp, r),
+    (STRING s): tuya set value string(dev, dp, s)
+  ESAC;

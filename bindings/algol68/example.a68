@@ -1,0 +1,38 @@
+COMMENT
+  example.a68 — demonstrate libseatuya via GCC ga68 Algol 68 frontend
+
+  Build (GCC 16+):
+    ga68 -lseatuya seatuya.a68 example.a68 -o example
+COMMENT
+
+PROC env or = (STRING name, STRING default) STRING:
+  BEGIN
+    STRING val := getenv(name);
+    IF val = "" THEN default ELSE val FI
+  END;
+
+PROC main = VOID:
+  BEGIN
+    STRING device id := env or("TUYA_DEVICE_ID", "0123456789abcdef01234567");
+    STRING local key := env or("TUYA_LOCAL_KEY", "0123456789abcdef");
+    STRING ip        := env or("TUYA_IP",        "192.168.1.100");
+    STRING ver       := env or("TUYA_VERSION",    "3.4");
+
+    print(("seatuya version: ", seatuya version, newline));
+
+    DEV dev := seatuya create(device id, ip, local key, ver);
+    IF dev IS VOID(NIL) THEN
+      put(stand error, ("ERROR: Could not create device handle", newline));
+      stop
+    FI;
+
+    print(("Connected: ", (seatuya is connected(dev) | "true" | "false"), newline));
+    print(("turn_on: ", seatuya turn on(dev, 1), newline));
+    print(("status: ", seatuya status(dev), newline));
+    print(("turn_off: ", seatuya turn off(dev, 1), newline));
+
+    seatuya destroy(dev);
+    print(("Done.", newline))
+  END;
+
+main

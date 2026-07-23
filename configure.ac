@@ -192,6 +192,9 @@ AC_CONFIG_FILES([Makefile
                  bindings/forth/Makefile
                  bindings/apl/Makefile
                  bindings/objc/Makefile
+                 bindings/fortran/Makefile\
+                 bindings/cobol/Makefile\
+                 bindings/algol68/Makefile
                  bindings/bqn/Makefile
                  src/Makefile
                  include/Makefile
