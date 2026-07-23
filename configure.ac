@@ -196,6 +196,22 @@ AC_CONFIG_FILES([Makefile
                  bindings/cobol/Makefile\
                  bindings/algol68/Makefile
                  bindings/squeak/Makefile
+                 bindings/scala/Makefile\
+                 bindings/haxe/Makefile\
+                 bindings/vala/Makefile\
+                 bindings/idris/Makefile\
+                 bindings/fennel/Makefile\
+                 bindings/v/Makefile\
+                 bindings/factor/Makefile\
+                 bindings/jlang/Makefile\
+                 bindings/gleam/Makefile\
+                 bindings/wren/Makefile
+                 bindings/emacs/Makefile\
+                 bindings/hy/Makefile\
+                 bindings/terra/Makefile\
+                 bindings/eiffel/Makefile\
+                 bindings/mercury/Makefile\
+                 bindings/euphoria/Makefile
                  bindings/bqn/Makefile
                  src/Makefile
                  include/Makefile
