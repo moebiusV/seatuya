@@ -119,11 +119,13 @@ static const int FAULT_POLL_SEC    = 5;
 static const int MAX_NON_E2_PROBES = 2;
 
 /* DP 107 fault bitfield (confirmed by tuya-local YAML).
-   Bit 0: sensor flag — powered on and reporting (not a fault)
+   Bit 0: sensor flag — device alive and reporting (always set when
+          powered on; does NOT indicate a fault).
    Bit 1: E2 — dry-run / low-water
    Bit 2: E3 — overheat / thermal cutoff
    Bits 3-7: reserved (not observed on ISV-300W)
-   Values seen: 1=normal running, 3=low-water, 7=low-water+overheat */
+   Only bits 1-7 indicate faults.  Bit 0 alone (raw 0x01) = normal.
+   Transitions seen: 1->3 (fault triggered), 3->1 (fault cleared). */
 static const int FAULT_E2_MASK     = 2;
 
 static const char *
