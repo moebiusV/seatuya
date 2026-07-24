@@ -847,14 +847,18 @@ cmd_status(tuya_device_t *d)
         }
 
         tprintf("  Power:          %s\n", power ? "ON" : "OFF");
-        tprintf("  Status:         %s\n", status[0] ? status : "?");
+        tprintf("  Status:         %s%s\n", status[0] ? status : "?",
+                strcmp(status, "complete") == 0 ? " (cooking done)" :
+                strcmp(status, "working") == 0 ? " (heating)" :
+                strcmp(status, "stop") == 0 ? " (idle)" : "");
         tprintf("  Current:        %.1f C / %.1f F\n",
             current / 10.0, c_to_f(current / 10.0));
         tprintf("  Target:         %.1f C / %.1f F\n",
             target / 10.0, c_to_f(target / 10.0));
         tprintf("  Timer:          %d min (remaining: %d)\n", timer, remain);
         tprintf("  Unit:           %s\n", unit ? "Celsius" : "Fahrenheit");
-        tprintf("  Fault:          %d\n", fault);
+        { char fb[256]; fault_bits_str(fault, fb, sizeof(fb));
+          tprintf("  Fault:          %s\n", fb); }
         tprintf("  Recipe:         %d\n", recipe);
         tprintf("  Calibration:    %.1f C\n", cal / 10.0);
         tuya_free_string(resp);
@@ -934,6 +938,15 @@ run_ramp(tuya_device_t *d, struct phase *phases, int nphases, bool poweroff)
                             ph->duration_secs / 60, ph->duration_secs % 60);
 
                         set_temp(d, ph->start);
+                        /* Safety: engage device built-in timer so the cooker
+                           auto-off if sousctl crashes mid-hold. DP 105 in
+                           minutes, max 5999 per tuya-local YAML spec. */
+                        {
+                                int tm = ph->duration_secs / 60;
+                                if (tm < 1) tm = 1;
+                                vlog("  device timer set to %d min\n", tm);
+                                tuya_set_value_int(d, DPS_TIMER, tm);
+                        }
                         wait_for_temp(d, ph->start);
                         {
                                 int cur = read_current_temp(d);
