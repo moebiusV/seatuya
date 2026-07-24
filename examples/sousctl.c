@@ -93,7 +93,7 @@ tprintf(const char *fmt, ...)
 
 enum inkbird_dps {
         DPS_POWER        = 101,   /* bool: on/off                       */
-        DPS_STATUS       = 102,   /* string: "working" / "stopping"     */
+        DPS_STATUS       = 102,   /* string: "stop"/"working"/"complete" */
         DPS_TARGET_TEMP  = 103,   /* int: target temp * 10 (Celsius)    */
         DPS_CURRENT_TEMP = 104,   /* int: water temp * 10 (Celsius)     */
         DPS_TIMER        = 105,   /* int: timer duration in minutes     */
@@ -118,26 +118,33 @@ static const int PROBE_WINDOW_SEC  = 10;
 static const int FAULT_POLL_SEC    = 5;
 static const int MAX_NON_E2_PROBES = 2;
 
-/* DP 107 fault bitfield.  Observed value 3 (= bits 0+1) on ISV-300W
-   for both E2 (dry-run) and E3 (low-water).  Bit 1 is the E2 indicator
-   per the standard Tuya bit-per-E-code convention. */
-static const int FAULT_E2_MASK     = 2;   /* bit 1 = dry-run / low-water */
+/* DP 107 fault bitfield (confirmed by tuya-local YAML).
+   Bit 0: sensor flag — powered on and reporting (not a fault)
+   Bit 1: E2 — dry-run / low-water
+   Bit 2: E3 — overheat / thermal cutoff
+   Bits 3-7: reserved (not observed on ISV-300W)
+   Values seen: 1=normal running, 3=low-water, 7=low-water+overheat */
+static const int FAULT_E2_MASK     = 2;
 
 static const char *
 fault_bits_str(int code, char *buf, size_t bufsz)
 {
-        int faults = code & ~1;
+        static const char *labels[8] = {
+                "powered-on",
+                "E2 dry-run/low-water",
+                "E3 overheat",
+                "E4", "E5", "E6", "E7", "E8",
+        };
         int len = 0;
-        if (faults == 0) {
-                snprintf(buf, bufsz, "none (running, raw 0x%02x)", code);
-        } else {
-                for (int b = 1; b < 8; b++)
-                        if (code & (1 << b))
-                                len += snprintf(buf + len,
-                                    bufsz - (size_t)len,
-                                    "E%d ", b + 1);
-                snprintf(buf + len, bufsz - (size_t)len,
-                    "(raw 0x%02x)", code);
+        if (code == 0) {
+                snprintf(buf, bufsz, "no response (raw 0x00)");
+                return buf;
+        }
+        len += snprintf(buf, bufsz, "raw 0x%02x =", code);
+        for (int b = 0; b < 8; b++) {
+                if (code & (1 << b))
+                        len += snprintf(buf + len, bufsz - (size_t)len,
+                            " [bit %d: %s]", b, labels[b]);
         }
         return buf;
 }
