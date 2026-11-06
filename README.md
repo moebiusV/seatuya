@@ -571,7 +571,7 @@ what makes local Tuya control possible at all.
 | [tuya-local](https://github.com/make-all/tuya-local) | Python | Home Assistant custom integration for local control. |
 | [tuyapi](https://github.com/codetheweb/tuyapi) | Node.js | One of the earliest local-control implementations. |
 | [TuyaOpen](https://github.com/tuya/TuyaOpen) | C | Tuya's official open-source SDK for embedded development. |
-| [tuyaha](https://github.com/PaulAnnewordup/tuyaha) | Python | Cloud-only Tuya API wrapper. |
+| [tuyaha](https://github.com/PaulAnnekov/tuyaha) | Python | Cloud-only Tuya API wrapper. |
 | [localtuya](https://github.com/rospogrigio/localtuya) | Python | Another Home Assistant integration for local control. |
 | [tuya-mqtt](https://github.com/TheAgentK/tuya-mqtt) | Node.js | MQTT bridge for Tuya devices. |
 | [TuyaOS](https://developer.tuya.com/en/tuyaos) | C | Tuya's commercial embedded OS (closed source, listed for context). |
