@@ -567,7 +567,7 @@ what makes local Tuya control possible at all.
 | Project | Language | Notes |
 |---------|----------|-------|
 | [tinytuya](https://github.com/jasonacox/tinytuya) | Python | Widely used local-control library. seatuya's API, device classes, DP mappings, and device subclass hierarchy are modeled directly on tinytuya. |
-| [tuyapp](https://github.com/rnascunha/tuyapp) | C++ | Protocol implementation that seatuya wraps. Provides the encryption, framing, and session negotiation that libseatuya exposes through a C ABI. |
+| [tuyapp](https://github.com/gordonb3/tuyapp) | C++ | Protocol implementation that seatuya wraps. Provides the encryption, framing, and session negotiation that libseatuya exposes through a C ABI. |
 | [tuya-local](https://github.com/make-all/tuya-local) | Python | Home Assistant custom integration for local control. |
 | [tuyapi](https://github.com/codetheweb/tuyapi) | Node.js | One of the earliest local-control implementations. |
 | [TuyaOpen](https://github.com/tuya/TuyaOpen) | C | Tuya's official open-source SDK for embedded development. |
