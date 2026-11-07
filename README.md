@@ -1,5 +1,7 @@
 # seatuya
 
+[github.com/moebiusV/seatuya](https://github.com/moebiusV/seatuya) | `git clone https://github.com/moebiusV/seatuya`
+
 A C wrapper library for tuyapp, providing a stable C ABI for
 controlling Tuya / Smart Life devices locally and via the cloud.
 Supports protocol versions 3.1, 3.3, 3.4, and 3.5.
